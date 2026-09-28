@@ -25,9 +25,9 @@
     <section class="hero card">
       <div>
         <h1>Fotoğrafı çek, miktarı kontrol et, stok kendisi hesaplansın.</h1>
-        <p>101 gelen, 251 satan, 301 transfer. 301'de + bize gelen, - bizden giden.</p>
+        <p>101 gelen, 251 satan, 301 transfer ve fire. 301'de + bize gelen, - bizden giden; fire stoktan otomatik düşer.</p>
       </div>
-      <div class="formula">Önceki + 101 − 251 + 301 + Diğer Net = Olması Gereken</div>
+      <div class="formula">Önceki + 101 − 251 + 301 − Fire + Diğer Net = Olması Gereken</div>
     </section>
 
     <section class="scan-grid">
@@ -35,6 +35,7 @@
       <button class="scan-btn incoming" data-mode="101"><span>📷</span><b>101 Gelen</b><small>Toplam miktarı günceller</small></button>
       <button class="scan-btn sales" data-mode="251"><span>📷</span><b>251 Satan</b><small>Satış toplamını günceller</small></button>
       <button class="scan-btn transfer" data-mode="301"><span>📷</span><b>301 Transfer</b><small>+ gelen / - giden</small></button>
+      <button id="wasteEntryBtn" class="scan-btn waste" type="button"><span>🗑️</span><b>Fire Girişi</b><small>Aynı kodu otomatik toplar ve düşer</small></button>
     </section>
     <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden>
 
