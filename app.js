@@ -402,5 +402,18 @@ $('#offlinePrepBtn').onclick=offline;$('#loadDemoBtn').onclick=()=>{const p=ensu
 $('#clearAllBtn').onclick=()=>{if(confirm('Tüm stok verisi silinsin mi?')){st=fresh();save()}};$('#clearHistoryBtn').onclick=()=>{if(confirm('Geçmiş silinsin mi?')){st.history=[];save()}};
 $('#exportXlsxBtn').onclick=appendExcelBackup;$('#exportFireBtn').onclick=exportFire;
 $('#exportBackupBtn').onclick=()=>dl(JSON.stringify(st,null,2),'stok-foto-yedek.json','application/json');$('#importBackupInput').onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!d.products)throw Error('Geçersiz yedek');st=d;save();toast('Yedek geri yüklendi')}catch(x){alert(x.message)}};
-window.addEventListener('online',render);window.addEventListener('offline',render);if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));render();
+function bootRender(){
+ try{render()}catch(e){console.error('Stok Foto render error',e)}
+}
+window.addEventListener('online',bootRender);
+window.addEventListener('offline',bootRender);
+window.addEventListener('pageshow',bootRender);
+window.addEventListener('focus',bootRender);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)bootRender()});
+if('serviceWorker'in navigator){
+ navigator.serviceWorker.register('./sw.js').then(r=>r.update().catch(()=>{})).catch(()=>{});
+}
+bootRender();
+setTimeout(bootRender,250);
+setTimeout(bootRender,1200);
 })();
