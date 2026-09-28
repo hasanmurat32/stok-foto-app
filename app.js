@@ -47,7 +47,7 @@ function load(){
  }
 }
 function save(){localStorage.setItem(KEY,JSON.stringify(st));render()}
-function activateTab(name){$('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));$('.tab-panel').forEach(x=>x.classList.toggle('active',x.id==='tab-'+name))}
+function activateTab(name){$$('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));$$('.tab-panel').forEach(x=>x.classList.toggle('active',x.id==='tab-'+name))}
 function finishSave(message,tab){closeM();save();if(tab)activateTab(tab);if(message)toast(message)}
 function n(v){v=Number(v);return Number.isFinite(v)?v:0}
 function fmtQty(v){return new Intl.NumberFormat('tr-TR',{maximumFractionDigits:3}).format(n(v))}
@@ -71,8 +71,8 @@ function render(){
  E.list.innerHTML=a.map(p=>{const d=dif(p),cl=d==null?'diff-wait':d===0?'diff-zero':'diff-bad',dt=d==null?'Gerçek sayım bekliyor':d===0?'Fark 0':'Fark '+signed(d),u=p.unit||'ADET';return '<article class="card stock-card" data-code="'+p.code+'"><div class="stock-top"><div><div class="stock-name">'+esc(p.name)+'</div><div class="stock-code">'+p.code+' · '+u+'</div></div><div class="expected"><strong>'+fmtQty(exp(p))+'</strong><span>'+u+' · OLMASI GEREKEN</span></div></div><div class="metrics"><div class="metric"><span>Önceki</span><b>'+fmtQty(p.previous)+' '+u+'</b></div><div class="metric"><span>101 Gelen</span><b>'+fmtQty(p.in101)+' '+u+'</b></div><div class="metric"><span>251 Satan</span><b>'+fmtQty(p.sales251)+' '+u+'</b></div><div class="metric"><span>301 Transfer</span><b>'+signed(p.transfer301)+' '+u+'</b></div><div class="metric"><span>Fire</span><b>-'+fmtQty(p.waste)+' '+u+'</b></div><div class="metric"><span>Diğer Net</span><b>'+signed(p.otherNet)+' '+u+'</b></div></div><div class="editable-row"><label>Diğer Net<input class="other-net" type="number" step="0.001" inputmode="decimal" value="'+n(p.otherNet)+'"></label><label>Gerçek Sayım<input class="actual" type="number" step="0.001" inputmode="decimal" value="'+(p.actual===''?'':p.actual)+'" placeholder="Sayım günü"></label><div class="diff-badge '+cl+'">'+dt+'</div></div><div class="stock-actions"><div><button class="small-action edit-product">Adı / Birimi Düzelt</button> <button class="small-action fire-add">+ Fire Ekle</button></div><button class="link-danger delete-product">Ürünü sil</button></div></article>'}).join('');
  $$('.other-net').forEach(x=>x.onchange=e=>{const p=st.products[e.target.closest('.stock-card').dataset.code];p.otherNet=n(e.target.value);save()});
  $$('.actual').forEach(x=>x.onchange=e=>{const p=st.products[e.target.closest('.stock-card').dataset.code];p.actual=e.target.value===''?'':n(e.target.value);save()});
- $('.edit-product').forEach(x=>x.onclick=e=>openProductEdit(e.target.closest('.stock-card').dataset.code));
- $('.fire-add').forEach(x=>x.onclick=e=>openWaste(e.target.closest('.stock-card').dataset.code));
+ $$('.edit-product').forEach(x=>x.onclick=e=>openProductEdit(e.target.closest('.stock-card').dataset.code));
+ $$('.fire-add').forEach(x=>x.onclick=e=>openWaste(e.target.closest('.stock-card').dataset.code));
  $$('.delete-product').forEach(x=>x.onclick=e=>{const c=e.target.closest('.stock-card').dataset.code;if(confirm(c+' silinsin mi?')){delete st.products[c];save()}});
  if(E.fireList){
   const fp=Object.values(st.products).filter(p=>n(p.waste)>0).sort((a,b)=>a.code.localeCompare(b.code));
