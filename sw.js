@@ -1,4 +1,4 @@
-const APP_CACHE='stok-foto-app-v12';
+const APP_CACHE='stok-foto-app-v13';
 const OCR_CACHE='stok-foto-ocr-v2';
 const APP_ASSETS=['./','./index.html','./style.css','./app.js','./manifest.webmanifest','./icons/icon.svg'];
 const OCR_HOSTS=['cdn.jsdelivr.net','tessdata.projectnaptha.com'];
