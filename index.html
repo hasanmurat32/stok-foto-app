@@ -83,16 +83,17 @@
         <label>Önceki sayım tarihi
           <input id="countDateInput" type="date">
         </label>
-        <div class="status-box"><b>3 kullanıcı</b><br>İşlemler hangi kullanıcı yaptı bilgisiyle kaydedilir. İsimleri aşağıdan değiştirebilirsin.</div>
-        <label>Kullanıcı 1
-          <input id="userName1" type="text" value="Murat">
+        <div class="status-box"><b>3 kullanıcı adı</b><br>Buraya gerçek isimleri yazabilirsin. Yapılan işlemlerde seçili kişinin adı geçmişe kaydedilir.</div>
+        <label>1. kişi adı
+          <input id="userName1" type="text" placeholder="Örn. Murat">
         </label>
-        <label>Kullanıcı 2
-          <input id="userName2" type="text" value="Yardımcı 1">
+        <label>2. kişi adı
+          <input id="userName2" type="text" placeholder="Örn. Ahmet">
         </label>
-        <label>Kullanıcı 3
-          <input id="userName3" type="text" value="Yardımcı 2">
+        <label>3. kişi adı
+          <input id="userName3" type="text" placeholder="Örn. Mehmet">
         </label>
+        <button id="saveUserNamesBtn" class="secondary">İsimleri Kaydet</button>
         <button id="offlinePrepBtn" class="primary">Çevrimdışı OCR'ı hazırla</button>
         <div id="offlineStatus" class="status-box">İlk kurulumda internet varken bu düğmeye bir kez bas.</div>
         <button id="loadDemoBtn" class="secondary">Yoğurt örneğini yükle (30 adet)</button>
