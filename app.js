@@ -2,12 +2,12 @@
 'use strict';
 const KEY='stokFotoV2';
 const U={main:'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js',worker:'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/worker.min.js',core:'https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0/tesseract-core.wasm.js',lang:'https://tessdata.projectnaptha.com/4.0.0_fast'};
-const LABEL={prev:'Önceki Sayım','101':'101 Gelen','251':'251 Satan','301':'301 Transfer',fire:'Fire'};
+const LABEL={prev:'Önceki Sayım','101':'101 Gelen','251':'251 Satan','301':'301 Transfer',fire:'Fire',label:'Yeni Ürün / Etiket'};
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 let st=load(),mode='',parsed=null,raw='',worker=null,preview='';
-const E={cam:$('#cameraInput'),modal:$('#scanModal'),title:$('#modalTitle'),sub:$('#modalSub'),body:$('#scanBody'),save:$('#saveScanBtn'),cancel:$('#cancelScanBtn'),close:$('#closeModalBtn'),bar:$('#progressBar'),list:$('#stockList'),empty:$('#emptyState'),search:$('#searchInput'),pc:$('#productCount'),dc:$('#diffCount'),hist:$('#historyList'),date:$('#countDateInput'),net:$('#netBadge'),off:$('#offlineStatus'),toast:$('#toast'),user:$('#userSelect'),userNames:[$('#userName1'),$('#userName2'),$('#userName3')],saveUsers:$('#saveUserNamesBtn')};
-function fresh(){return{version:4,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[]}}
-function load(){try{const d=JSON.parse(localStorage.getItem(KEY))||fresh();d.settings=d.settings||{};if(!Array.isArray(d.settings.users)||d.settings.users.length!==3)d.settings.users=['Murat','Yardımcı 1','Yardımcı 2'];d.settings.activeUser=Math.max(0,Math.min(2,Number(d.settings.activeUser)||0));if(!Array.isArray(d.history))d.history=[];if(!Array.isArray(d.snapshots))d.snapshots=[];d.products=d.products||{};Object.values(d.products).forEach(p=>{if(p.waste==null)p.waste=0;if(p.otherNet==null)p.otherNet=0;if(!p.unit)p.unit='ADET'});d.version=4;return d}catch(e){return fresh()}}
+const E={cam:$('#cameraInput'),modal:$('#scanModal'),title:$('#modalTitle'),sub:$('#modalSub'),body:$('#scanBody'),save:$('#saveScanBtn'),cancel:$('#cancelScanBtn'),close:$('#closeModalBtn'),bar:$('#progressBar'),list:$('#stockList'),empty:$('#emptyState'),search:$('#searchInput'),pc:$('#productCount'),dc:$('#diffCount'),hist:$('#historyList'),date:$('#countDateInput'),net:$('#netBadge'),off:$('#offlineStatus'),toast:$('#toast'),user:$('#userSelect'),userNames:[$('#userName1'),$('#userName2'),$('#userName3')],saveUsers:$('#saveUserNamesBtn'),fireList:$('#fireList'),fireEmpty:$('#fireEmpty'),fireKg:$('#fireKgTotal'),fireAdet:$('#fireAdetTotal')};
+function fresh(){return{version:5,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY))||fresh();d.settings=d.settings||{};if(!Array.isArray(d.settings.users)||d.settings.users.length!==3)d.settings.users=['Murat','Yardımcı 1','Yardımcı 2'];d.settings.activeUser=Math.max(0,Math.min(2,Number(d.settings.activeUser)||0));if(!Array.isArray(d.history))d.history=[];if(!Array.isArray(d.snapshots))d.snapshots=[];d.products=d.products||{};Object.values(d.products).forEach(p=>{if(p.waste==null)p.waste=0;if(p.otherNet==null)p.otherNet=0;if(!p.unit)p.unit='ADET'});if(!Array.isArray(d.fireLog)){d.fireLog=d.history.filter(h=>h.type==='fire').map(h=>{const p=d.products[h.code]||{};return{at:h.at,user:h.user||'',code:h.code,name:h.name||p.name||'',unit:h.unit||p.unit||'ADET',qty:Math.abs(n(h.newv)-n(h.oldv)),cumulative:n(h.newv)}})}d.version=5;return d}catch(e){return fresh()}}
 function save(){localStorage.setItem(KEY,JSON.stringify(st));render()}
 function n(v){v=Number(v);return Number.isFinite(v)?v:0}
 function fmtQty(v){return new Intl.NumberFormat('tr-TR',{maximumFractionDigits:3}).format(n(v))}
@@ -31,6 +31,14 @@ function render(){
  $$('.actual').forEach(x=>x.onchange=e=>{const p=st.products[e.target.closest('.stock-card').dataset.code];p.actual=e.target.value===''?'':n(e.target.value);save()});
  $$('.fire-add').forEach(x=>x.onclick=e=>openWaste(e.target.closest('.stock-card').dataset.code));
  $$('.delete-product').forEach(x=>x.onclick=e=>{const c=e.target.closest('.stock-card').dataset.code;if(confirm(c+' silinsin mi?')){delete st.products[c];save()}});
+ if(E.fireList){
+  const fp=Object.values(st.products).filter(p=>n(p.waste)>0).sort((a,b)=>a.code.localeCompare(b.code));
+  const kg=fp.filter(p=>(p.unit||'ADET')==='KG').reduce((s,p)=>s+n(p.waste),0);
+  const adet=fp.filter(p=>(p.unit||'ADET')!=='KG').reduce((s,p)=>s+n(p.waste),0);
+  E.fireKg.textContent=fmtQty(kg)+' KG';E.fireAdet.textContent=fmtQty(adet)+' ADET';
+  E.fireEmpty.style.display=fp.length?'none':'block';
+  E.fireList.innerHTML=fp.map(p=>'<div class="card fire-item"><div class="fire-item-main"><b>'+esc(p.name)+'</b><small>'+p.code+' · '+(p.unit||'ADET')+'</small></div><div class="fire-item-qty">-'+fmtQty(p.waste)+' '+(p.unit||'ADET')+'</div></div>').join('');
+ }
  E.hist.innerHTML=st.history.length?st.history.slice().reverse().map(h=>'<div class="card history-item"><div class="history-type">'+esc(LABEL[h.type]||h.type)+'</div><div><b>'+h.code+'</b> '+esc(h.name||'')+'<br><small>'+esc(h.user||'Bilinmeyen')+' · '+esc(h.note||'')+'</small></div></div>').join(''):'<div class="card empty">Henüz işlem geçmişi yok.</div>';
 }
 function openM(t,s){E.title.textContent=t;E.sub.textContent=s||'';E.modal.classList.add('open');E.save.disabled=true;E.bar.style.width='0%'}
@@ -75,6 +83,16 @@ function productNameFromBlock(block,c){
   return s.replace(/^[\-:]+|[\-:]+$/g,'').trim()
 }
 function unitFromBlock(block){const s=String(block||'').toUpperCase();const m=s.match(/B[IİI1L]R[IİI1L]M\s*[:=]?\s*(KG|KGR|KILO(?:GRAM)?|ADET|ADT)\b/);if(m)return normUnit(m[1]);if(/\b(KG|KGR|KILO(?:GRAM)?)\b/.test(s))return 'KG';if(/\b(ADET|ADT)\b/.test(s))return 'ADET';return 'ADET'}
+function labelCode(t){
+ for(const l of lines(t)){if(/(?:ürün|urun|malzeme)/i.test(l)&&/kod/i.test(l)){const m=l.match(/(?:^|\D)([0-9OIL]{7,8})(?!\d)/);if(m)return code(m[1])}}
+ const m=String(t||'').match(/(?:^|\D)([0-9OIL]{7,8})(?!\d)/);return m?code(m[1]):''
+}
+function labelName(t,c){
+ const bad=/(?:barkod|barcode|fiyat|price|ürün\s*kod|urun\s*kod|malzeme\s*kod|toplam|tutar|birim|kdv|tl\b)/i;
+ const cand=lines(t).map(x=>x.replace(c,'').replace(/(?:ürün\s*adı|urun\s*adi|açıklama|aciklama)\s*[:=]?/ig,'').trim()).filter(x=>x&&!bad.test(x)&&/[A-Za-zÇĞİÖŞÜçğıöşü]/.test(x)&&x.replace(/[^A-Za-zÇĞİÖŞÜçğıöşü]/g,'').length>=4).sort((a,b)=>b.length-a.length);
+ return cand[0]||''
+}
+function parseLabel(t){const c=labelCode(t);return{kind:'label',code:c,name:labelName(t,c),unit:unitFromBlock(t)}}
 function parsePrev(t){
   const L=lines(t),starts=[];
   for(let i=0;i<L.length;i++){const c=productCodeFromLine(L[i]);if(c.length>=7)starts.push({i,c})}
@@ -90,14 +108,18 @@ function parsePrev(t){
   const M=new Map();rows.forEach(r=>M.set(r.code,r));
   return{kind:'prev',rows:Array.from(M.values())}
 }
-async function scan(file){openM(LABEL[mode]+' fotoğrafı','Fotoğraf okunuyor…');preview=URL.createObjectURL(file);E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="status-box">OCR hazırlanıyor…</div>';try{const c=await prep(file),w=await getWorker(),r=await w.recognize(c);raw=r.data.text||'';parsed=mode==='prev'?parsePrev(raw):parseMove(raw,mode);E.bar.style.width='100%';confirmUI()}catch(e){E.body.innerHTML+='<div class="status-box" style="color:#992c2c">Okuma başarısız: '+esc(e.message||e)+'</div>'}}
+async function scan(file){openM(LABEL[mode]+' fotoğrafı','Fotoğraf okunuyor…');preview=URL.createObjectURL(file);E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="status-box">OCR hazırlanıyor…</div>';try{const c=await prep(file),w=await getWorker(),r=await w.recognize(c);raw=r.data.text||'';parsed=mode==='prev'?parsePrev(raw):mode==='label'?parseLabel(raw):parseMove(raw,mode);E.bar.style.width='100%';confirmUI()}catch(e){E.body.innerHTML+='<div class="status-box" style="color:#992c2c">Okuma başarısız: '+esc(e.message||e)+'</div>'}}
 function confirmUI(){
  E.sub.textContent='Okunan bilgileri kontrol et; gerekirse düzelt.';
+ if(parsed.kind==='label'){
+  E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="confirm-grid"><div class="field"><label>Ürün Kodu</label><input id="lc" value="'+esc(parsed.code||'')+'" inputmode="numeric" placeholder="7-8 haneli ürün kodu"></div><div class="field"><label>Ürün Adı</label><input id="ln" value="'+esc(parsed.name||'')+'" placeholder="Ürün adı"></div><div class="field"><label>Birim</label><select id="lu"><option value="ADET">ADET</option><option value="KG">KG</option></select></div><div class="status-box">Bu ürün önceki sayımda yoksa <b>Önceki = 0</b> ile kaydolur. Daha sonra 101 / 251 / 301 / Fire verilerini girdiğinde doğrudan aynı ürüne işlenir.</div></div><details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details>';
+  $('#lu').value=parsed.unit||'ADET';const valid=()=>{E.save.disabled=code($('#lc').value).length<7||!$('#ln').value.trim()};$('#lc').oninput=valid;$('#ln').oninput=valid;valid();return
+ }
  if(parsed.kind==='prev'){E.body.innerHTML='<img class="preview" src="'+preview+'"><div id="prevRows" class="confirm-grid">'+parsed.rows.map((r,i)=>'<div class="confirm-row" data-i="'+i+'"><input class="code-input" value="'+r.code+'" inputmode="numeric"><input class="name-input" value="'+esc(r.name)+' ('+esc(r.unit||'ADET')+')"><input class="qty-input" type="number" step="0.001" value="'+r.qty+'" inputmode="decimal"><button class="remove-row">✕</button></div>').join('')+'</div><button id="addPrevRow" class="secondary" style="margin-top:8px">+ Elle satır ekle</button><details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details>';bindPrev();$('#addPrevRow').onclick=()=>{parsed.rows.push({code:'',name:'',qty:0});confirmUI()};E.save.disabled=!parsed.rows.length;return}
  E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="confirm-grid"><div class="field"><label>Ürün Kodu</label><input id="mc" value="'+esc(parsed.code)+'" inputmode="numeric"></div><div class="field"><label>Ürün Adı</label><input id="mn" value="'+esc(parsed.name)+'"></div><div class="field"><label>Toplam Miktar</label><input id="mq" type="number" inputmode="numeric" value="'+(parsed.qty==null?'':Math.abs(parsed.qty))+'"></div>'+(parsed.mode==='301'?'<div class="field"><label>301 yönü</label><div class="direction"><button id="dp" class="'+(parsed.dir>0?'active':'')+'">+ Bize gelen</button><button id="dm" class="'+(parsed.dir<0?'active':'')+'">− Bizden giden</button></div></div>':'')+'<details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details></div>';const val=()=>E.save.disabled=!(code($('#mc').value).length>=7&&$('#mq').value!=='');$('#mc').oninput=val;$('#mq').oninput=val;if(parsed.mode==='301'){$('#dp').onclick=()=>{parsed.dir=1;confirmUI()};$('#dm').onclick=()=>{parsed.dir=-1;confirmUI()}}val()
 }
 function bindPrev(){$$('#prevRows .confirm-row').forEach(row=>{const i=Number(row.dataset.i),r=parsed.rows[i];row.querySelector('.code-input').oninput=e=>r.code=code(e.target.value);row.querySelector('.name-input').oninput=e=>{const v=e.target.value;r.name=v.replace(/\s*\((ADET|KG)\)\s*$/i,'').trim()};row.querySelector('.qty-input').oninput=e=>r.qty=Number(e.target.value);row.querySelector('.remove-row').onclick=()=>{parsed.rows.splice(i,1);confirmUI()}})}
-function hist(type,p,field,oldv,newv,note){const user=st.settings.users[st.settings.activeUser]||'Kullanıcı';st.history.push({at:new Date().toISOString(),user,type,code:p.code,name:p.name,field,oldv,newv,note});if(st.history.length>1000)st.history=st.history.slice(-1000)}
+function hist(type,p,field,oldv,newv,note){const user=st.settings.users[st.settings.activeUser]||'Kullanıcı';st.history.push({at:new Date().toISOString(),user,type,code:p.code,name:p.name,unit:p.unit||'ADET',field,oldv,newv,note});if(st.history.length>1000)st.history=st.history.slice(-1000)}
 function openWaste(prefill){
  openM('Fire Girişi','Aynı ürün kodundaki fireler otomatik toplanır ve stoktan düşer. Tartılı ürünlerde birim KG seçilir.');
  E.bar.style.width='100%';
@@ -108,7 +130,8 @@ function openWaste(prefill){
  $('#fireCode').oninput=refresh;$('#fireQty').oninput=refresh;$('#fireUnit').onchange=refresh;refresh()
 }
 function saveScan(){
- if(parsed&&parsed.kind==='fire'){const fc=code($('#fireCode').value),p=st.products[fc],q0=parseQtyValue($('#fireQty').value),q=q0==null?NaN:Math.abs(q0);if(!p||!Number.isFinite(q)||q<=0)return;p.unit=normUnit($('#fireUnit').value);const old=n(p.waste);p.waste=old+q;hist('fire',p,'waste',old,p.waste,'Fire +'+fmtQty(q)+' '+p.unit+' · stoktan -'+fmtQty(q)+' '+p.unit);save();closeM();toast(p.code+' fire -'+fmtQty(q)+' '+p.unit+' · olması gereken '+fmtQty(exp(p))+' '+p.unit);return}
+ if(parsed&&parsed.kind==='label'){const lc=code($('#lc').value),name=$('#ln').value.trim(),unit=normUnit($('#lu').value);if(lc.length<7||!name)return;const existed=!!st.products[lc],p=ensure(lc,name,unit);hist('label',p,'product',existed?'mevcut':'yeni','kayıt',existed?'Etiket bilgisi güncellendi':'Yeni ürün etiketten kaydedildi · Önceki 0');save();closeM();toast(lc+(existed?' güncellendi':' yeni ürün kaydedildi'));return}
+ if(parsed&&parsed.kind==='fire'){const fc=code($('#fireCode').value),p=st.products[fc],q0=parseQtyValue($('#fireQty').value),q=q0==null?NaN:Math.abs(q0);if(!p||!Number.isFinite(q)||q<=0)return;p.unit=normUnit($('#fireUnit').value);const old=n(p.waste);p.waste=old+q;const at=new Date().toISOString(),user=st.settings.users[st.settings.activeUser]||'Kullanıcı';st.fireLog.push({at,user,code:p.code,name:p.name,unit:p.unit,qty:q,cumulative:p.waste});hist('fire',p,'waste',old,p.waste,'Fire +'+fmtQty(q)+' '+p.unit+' · stoktan -'+fmtQty(q)+' '+p.unit);save();closeM();toast(p.code+' fire -'+fmtQty(q)+' '+p.unit+' · olması gereken '+fmtQty(exp(p))+' '+p.unit);return}
  if(parsed.kind==='prev'){let k=0;parsed.rows.forEach(r=>{const c=code(r.code),q=Number(r.qty);if(c.length<7||!Number.isFinite(q))return;const p=ensure(c,r.name,r.unit),o=p.previous;p.previous=q;hist('prev',p,'previous',o,q,'Önceki sayım '+q);k++});save();closeM();toast(k+' ürün kaydedildi');return}
  const c=code($('#mc').value),name=$('#mn').value.trim(),q=Math.abs(Number($('#mq').value)),p=ensure(c,name);if(!p||!Number.isFinite(q))return;let f='',v=q;if(parsed.mode==='101')f='in101';if(parsed.mode==='251')f='sales251';if(parsed.mode==='301'){f='transfer301';v=q*(parsed.dir||1)}const o=p[f];p[f]=v;hist(parsed.mode,p,f,o,v,LABEL[parsed.mode]+' '+signed(v));save();closeM();toast(c+' güncellendi · olması gereken '+exp(p))
 }
@@ -130,13 +153,19 @@ function appendExcelBackup(){
  dl(cumulativeCsv(),'stok-yedek-birikimli-'+stamp+'.csv','text/csv;charset=utf-8');
  render();toast('Excel yedeğine yeni kayıt eklendi · toplam '+st.snapshots.length+' yedek')
 }
+function fireCsv(){
+ const rows=[['Tarih','Kullanıcı','Ürün Kodu','Ürün Adı','Birim','Fire Girişi','Ürün Toplam Fire']];
+ (st.fireLog||[]).forEach(x=>rows.push([x.at,x.user||'',x.code,x.name||'',x.unit||'ADET',x.qty,x.cumulative]));
+ return '\ufeff'+rows.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';')).join('\r\n')
+}
+function exportFire(){const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);dl(fireCsv(),'fire-raporu-'+stamp+'.csv','text/csv;charset=utf-8');toast('Fire raporu indirildi')}
 function dl(data,name,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:type||'application/octet-stream'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function offline(){const b=$('#offlinePrepBtn');b.disabled=true;openM('Çevrimdışı OCR hazırlanıyor','İlk kez internet gerekir.');E.save.style.display='none';E.cancel.textContent='Kapat';E.body.innerHTML='<div class="status-box">OCR motoru ve Türkçe model indiriliyor…</div>';try{const w=await getWorker(),c=document.createElement('canvas');c.width=300;c.height=80;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,300,80);x.fillStyle='#000';x.font='30px Arial';x.fillText('0200367 160',10,50);await w.recognize(c);st.settings.offlineReady=true;save();E.body.innerHTML='<div class="status-box" style="color:#116236"><b>Hazır.</b> Çevrimdışı OCR kurulumu tamamlandı. Bu pencereyi kapatabilirsin.</div>'}catch(e){E.body.innerHTML='<div class="status-box" style="color:#992c2c">Hazırlama başarısız: '+esc(e.message||e)+'</div>'}finally{b.disabled=false}}
 $$('.scan-btn[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;E.cam.value='';E.cam.click()});$('#wasteEntryBtn').onclick=()=>openWaste('');E.cam.onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)scan(f)};E.save.onclick=saveScan;E.cancel.onclick=closeM;E.close.onclick=closeM;E.search.oninput=render;E.date.onchange=()=>{st.settings.countDate=E.date.value;save()};if(E.user)E.user.onchange=()=>{st.settings.activeUser=Number(E.user.value)||0;save()};E.userNames.forEach((el,i)=>{if(el)el.onchange=()=>{const v=el.value.trim()||('Kullanıcı '+(i+1));st.settings.users[i]=v;save()}});if(E.saveUsers)E.saveUsers.onclick=()=>{E.userNames.forEach((el,i)=>{const v=(el&&el.value.trim())||('Kullanıcı '+(i+1));st.settings.users[i]=v});save();toast('Kullanıcı isimleri kaydedildi')};
 $$('.tab').forEach(b=>b.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.tab-panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#tab-'+b.dataset.tab).classList.add('active')});
 $('#offlinePrepBtn').onclick=offline;$('#loadDemoBtn').onclick=()=>{const p=ensure('0200367','YOĞURT %4 YAĞLI 3000 G DOST');Object.assign(p,{unit:'ADET',previous:16,in101:160,sales251:149,transfer301:3,waste:0,otherNet:0,actual:''});save();toast('Yoğurt örneği: 30 adet')};
 $('#clearAllBtn').onclick=()=>{if(confirm('Tüm stok verisi silinsin mi?')){st=fresh();save()}};$('#clearHistoryBtn').onclick=()=>{if(confirm('Geçmiş silinsin mi?')){st.history=[];save()}};
-$('#exportXlsxBtn').onclick=appendExcelBackup;
+$('#exportXlsxBtn').onclick=appendExcelBackup;$('#exportFireBtn').onclick=exportFire;
 $('#exportBackupBtn').onclick=()=>dl(JSON.stringify(st,null,2),'stok-foto-yedek.json','application/json');$('#importBackupInput').onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!d.products)throw Error('Geçersiz yedek');st=d;save();toast('Yedek geri yüklendi')}catch(x){alert(x.message)}};
 window.addEventListener('online',render);window.addEventListener('offline',render);if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));render();
 })();
