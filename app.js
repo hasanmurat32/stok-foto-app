@@ -7,7 +7,45 @@ const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(
 let st=load(),mode='',parsed=null,raw='',worker=null,preview='';
 const E={cam:$('#cameraInput'),modal:$('#scanModal'),title:$('#modalTitle'),sub:$('#modalSub'),body:$('#scanBody'),save:$('#saveScanBtn'),cancel:$('#cancelScanBtn'),close:$('#closeModalBtn'),bar:$('#progressBar'),list:$('#stockList'),empty:$('#emptyState'),search:$('#searchInput'),pc:$('#productCount'),dc:$('#diffCount'),hist:$('#historyList'),date:$('#countDateInput'),net:$('#netBadge'),off:$('#offlineStatus'),toast:$('#toast'),user:$('#userSelect'),userNames:[$('#userName1'),$('#userName2'),$('#userName3')],saveUsers:$('#saveUserNamesBtn'),fireList:$('#fireList'),fireEmpty:$('#fireEmpty'),fireKg:$('#fireKgTotal'),fireAdet:$('#fireAdetTotal'),fireValue:$('#fireValueTotal')};
 function fresh(){return{version:5,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
-function load(){try{const d=JSON.parse(localStorage.getItem(KEY))||fresh();d.settings=d.settings||{};if(!Array.isArray(d.settings.users)||d.settings.users.length!==3)d.settings.users=['Murat','Yardımcı 1','Yardımcı 2'];d.settings.activeUser=Math.max(0,Math.min(2,Number(d.settings.activeUser)||0));if(!Array.isArray(d.history))d.history=[];if(!Array.isArray(d.snapshots))d.snapshots=[];d.products=d.products||{};Object.values(d.products).forEach(p=>{if(p.waste==null)p.waste=0;if(p.otherNet==null)p.otherNet=0;if(p.previousAmount==null)p.previousAmount='';if(p.unitPrice==null||!Number.isFinite(Number(p.unitPrice))||Number(p.unitPrice)<0)p.unitPrice=(n(p.previous)>0&&n(p.previousAmount)>0)?n(p.previousAmount)/n(p.previous):0;if(!p.unit)p.unit='ADET'});if(!Array.isArray(d.fireLog)){d.fireLog=d.history.filter(h=>h.type==='fire').map(h=>{const p=d.products[h.code]||{};return{at:h.at,user:h.user||'',code:h.code,name:h.name||p.name||'',unit:h.unit||p.unit||'ADET',qty:Math.abs(n(h.newv)-n(h.oldv)),cumulative:n(h.newv)}})}d.fireLog.forEach(x=>{const p=d.products[x.code]||{},up=Number(x.unitPrice)>0?Number(x.unitPrice):calcUnitPrice(p);if(x.unitPrice==null)x.unitPrice=up;if(x.amount==null)x.amount=n(x.qty)*up});d.version=6;return d}catch(e){return fresh()}}
+function load(){
+ const raw=localStorage.getItem(KEY);
+ let d;
+ try{d=raw?JSON.parse(raw):fresh()}catch(e){return fresh()}
+ try{
+   d=d&&typeof d==='object'?d:fresh();
+   d.settings=d.settings||{};
+   if(!Array.isArray(d.settings.users)||d.settings.users.length!==3)d.settings.users=['Murat','Yardımcı 1','Yardımcı 2'];
+   d.settings.activeUser=Math.max(0,Math.min(2,Number(d.settings.activeUser)||0));
+   if(!Array.isArray(d.history))d.history=[];
+   if(!Array.isArray(d.snapshots))d.snapshots=[];
+   d.products=d.products&&typeof d.products==='object'?d.products:{};
+   Object.values(d.products).forEach(p=>{
+     if(p.waste==null)p.waste=0;
+     if(p.otherNet==null)p.otherNet=0;
+     if(p.previousAmount==null)p.previousAmount='';
+     if(p.unitPrice==null||!Number.isFinite(Number(p.unitPrice))||Number(p.unitPrice)<0)p.unitPrice=(n(p.previous)>0&&n(p.previousAmount)>0)?n(p.previousAmount)/n(p.previous):0;
+     if(!p.unit)p.unit='ADET'
+   });
+   if(!Array.isArray(d.fireLog)){
+     d.fireLog=d.history.filter(h=>h.type==='fire').map(h=>{const p=d.products[h.code]||{};return{at:h.at,user:h.user||'',code:h.code,name:h.name||p.name||'',unit:h.unit||p.unit||'ADET',qty:Math.abs(n(h.newv)-n(h.oldv)),cumulative:n(h.newv)}})
+   }
+   d.fireLog.forEach(x=>{const p=d.products[x.code]||{},up=Number(x.unitPrice)>0?Number(x.unitPrice):calcUnitPrice(p);if(x.unitPrice==null)x.unitPrice=up;if(x.amount==null)x.amount=n(x.qty)*up});
+   d.version=6;
+   return d
+ }catch(e){
+   // Never make an existing user's stock look empty just because a migration failed.
+   if(d&&typeof d==='object'){
+     d.settings=d.settings||{users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0};
+     if(!Array.isArray(d.settings.users))d.settings.users=['Murat','Yardımcı 1','Yardımcı 2'];
+     d.products=d.products&&typeof d.products==='object'?d.products:{};
+     d.history=Array.isArray(d.history)?d.history:[];
+     d.snapshots=Array.isArray(d.snapshots)?d.snapshots:[];
+     d.fireLog=Array.isArray(d.fireLog)?d.fireLog:[];
+     return d
+   }
+   return fresh()
+ }
+}
 function save(){localStorage.setItem(KEY,JSON.stringify(st));render()}
 function activateTab(name){$('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));$('.tab-panel').forEach(x=>x.classList.toggle('active',x.id==='tab-'+name))}
 function finishSave(message,tab){closeM();save();if(tab)activateTab(tab);if(message)toast(message)}
