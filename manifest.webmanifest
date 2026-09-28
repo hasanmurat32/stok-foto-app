@@ -1,0 +1,13 @@
+{
+  "name":"Stok Foto - Fotoğraftan Stok Takip",
+  "short_name":"Stok Foto",
+  "start_url":"./index.html",
+  "scope":"./",
+  "display":"standalone",
+  "background_color":"#f3f6fa",
+  "theme_color":"#17365D",
+  "description":"Önceki sayım, 101, 251 ve 301 ekranlarını fotoğraftan okuyarak teorik stok hesaplar.",
+  "icons":[
+    {"src":"icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
