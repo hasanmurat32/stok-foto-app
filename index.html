@@ -18,7 +18,10 @@
       <div class="brand">STOK FOTO</div>
       <div class="subtitle">Fotoğraftan teorik stok hesabı</div>
     </div>
-    <div id="netBadge" class="badge">Bağlantı kontrol ediliyor</div>
+    <div class="top-actions">
+      <select id="userSelect" class="user-select" aria-label="Aktif kullanıcı"></select>
+      <div id="netBadge" class="badge">Bağlantı kontrol ediliyor</div>
+    </div>
   </header>
 
   <main class="container">
@@ -79,6 +82,16 @@
         <h2>Ayarlar</h2>
         <label>Önceki sayım tarihi
           <input id="countDateInput" type="date">
+        </label>
+        <div class="status-box"><b>3 kullanıcı</b><br>İşlemler hangi kullanıcı yaptı bilgisiyle kaydedilir. İsimleri aşağıdan değiştirebilirsin.</div>
+        <label>Kullanıcı 1
+          <input id="userName1" type="text" value="Murat">
+        </label>
+        <label>Kullanıcı 2
+          <input id="userName2" type="text" value="Yardımcı 1">
+        </label>
+        <label>Kullanıcı 3
+          <input id="userName3" type="text" value="Yardımcı 2">
         </label>
         <button id="offlinePrepBtn" class="primary">Çevrimdışı OCR'ı hazırla</button>
         <div id="offlineStatus" class="status-box">İlk kurulumda internet varken bu düğmeye bir kez bas.</div>
