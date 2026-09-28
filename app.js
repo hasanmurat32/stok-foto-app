@@ -16,7 +16,7 @@ function code(v){return String(v||'').toUpperCase().replace(/O/g,'0').replace(/[
 function exp(p){return n(p.previous)+n(p.in101)-n(p.sales251)+n(p.transfer301)-n(p.waste)+n(p.otherNet)}
 function dif(p){return p.actual===''||p.actual==null?null:n(p.actual)-exp(p)}
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function ensure(c,name,unit,overwriteName){c=code(c);if(!c)return null;const isNew=!st.products[c];if(isNew)st.products[c]={code:c,name:name||('Ürün '+c),unit:normUnit(unit),previous:0,in101:0,sales251:0,transfer301:0,waste:0,otherNet:0,actual:'',nameSource:name?'ocr':'generic'};const p=st.products[c];if(p.waste==null)p.waste=0;if(!p.unit)p.unit='ADET';const generic=!p.name||p.name==='Ürün '+c;if(name&&(isNew||generic||overwriteName)){p.name=name;p.nameSource=overwriteName?'confirmed':(p.nameSource||'ocr')}if(unit&&(isNew||overwriteName||!p.unit))p.unit=normUnit(unit);return p}
+function ensure(c,name,unit,overwriteName){c=code(c);if(!c)return null;const isNew=!st.products[c];if(isNew)st.products[c]={code:c,name:name||('Ürün '+c),unit:normUnit(unit),previous:0,in101:0,sales251:0,transfer301:0,waste:0,otherNet:0,actual:'',nameSource:name?'ocr':'generic'};const p=st.products[c];if(p.waste==null)p.waste=0;if(!p.unit)p.unit='ADET';const generic=!p.name||p.name==='Ürün '+c;if(name&&(isNew||generic||overwriteName||p.nameSource!=='confirmed')){p.name=name;p.nameSource=overwriteName?'confirmed':'ocr'}if(unit&&(isNew||overwriteName||!p.unit))p.unit=normUnit(unit);return p}
 function toast(t){E.toast.textContent=t;E.toast.classList.add('show');setTimeout(()=>E.toast.classList.remove('show'),2200)}
 function signed(v){v=n(v);return v>0?'+'+v:String(v)}
 function render(){
@@ -46,7 +46,7 @@ function openM(t,s){E.title.textContent=t;E.sub.textContent=s||'';E.modal.classL
 function closeM(){E.modal.classList.remove('open');E.body.innerHTML='';parsed=null;raw='';E.save.style.display='';E.cancel.textContent='Vazgeç';if(preview){URL.revokeObjectURL(preview);preview=''}}
 async function loadOCR(){if(window.Tesseract)return;await new Promise((ok,no)=>{const s=document.createElement('script');s.src=U.main;s.onload=ok;s.onerror=()=>no(new Error('OCR kütüphanesi yüklenemedi'));document.head.appendChild(s)})}
 async function getWorker(){if(worker)return worker;await loadOCR();worker=await Tesseract.createWorker('tur',1,{workerPath:U.worker,corePath:U.core,langPath:U.lang,logger:m=>{if(m.progress!=null)E.bar.style.width=Math.round(m.progress*92+5)+'%';if(m.status)E.sub.textContent=m.status}});return worker}
-async function prep(file){const b=await createImageBitmap(file),sc=Math.min(2,1900/b.width),w=Math.round(b.width*sc),h=Math.round(b.height*sc),c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(b,0,0,w,h);b.close&&b.close();const im=x.getImageData(0,0,w,h),d=im.data;for(let i=0;i<d.length;i+=4){let g=.299*d[i]+.587*d[i+1]+.114*d[i+2];g=Math.max(0,Math.min(255,(g-128)*1.35+128));d[i]=d[i+1]=d[i+2]=g}x.putImageData(im,0,0);return c}
+async function prep(file,targetWidth=1900){const b=await createImageBitmap(file),sc=Math.min(2.6,targetWidth/b.width),w=Math.round(b.width*sc),h=Math.round(b.height*sc),c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(b,0,0,w,h);b.close&&b.close();const im=x.getImageData(0,0,w,h),d=im.data;for(let i=0;i<d.length;i+=4){let g=.299*d[i]+.587*d[i+1]+.114*d[i+2];g=Math.max(0,Math.min(255,(g-128)*1.35+128));d[i]=d[i+1]=d[i+2]=g}x.putImageData(im,0,0);return c}
 function lines(t){return String(t||'').split(/\r?\n/).map(s=>s.replace(/[|]/g,' ').replace(/\s+/g,' ').trim()).filter(Boolean)}
 function findCode(t){for(const l of lines(t)){if(/malzeme/i.test(l)&&/kod/i.test(l)){const m=l.match(/[0-9OIL]{7,8}/);if(m)return code(m[0])}}const m=String(t).match(/[0-9OIL]{7,8}/);return m?code(m[0]):''}
 function parseQtyValue(v){if(v==null)return null;let s=String(v).trim().replace(/\s/g,'');if(!s)return null;const neg=s.startsWith('-');s=s.replace(/^[+\-]/,'');if(s.includes(',')){s=s.replace(/\./g,'').replace(',','.')}else{const parts=s.split('.');if(parts.length>2)s=parts.join('');}const x=Number((neg?'-':'')+s);return Number.isFinite(x)?x:null}
@@ -113,6 +113,62 @@ function labelName(t,c){
  return out.join(' ').replace(/\s+/g,' ').trim()
 }
 function parseLabel(t){const c=labelCode(t);return{kind:'label',code:c,name:labelName(t,c),unit:unitFromBlock(t)}}
+function normOcr(s){return String(s||'').toLocaleLowerCase('tr-TR').replace(/ı/g,'i').replace(/[1l|]/g,'i').replace(/[^a-z0-9çğıöşü+\-.,:% ]/g,' ').replace(/\s+/g,' ').trim()}
+function flattenOcrLines(blocks){
+ const out=[];
+ (blocks||[]).forEach(b=>(b.paragraphs||[]).forEach(p=>(p.lines||[]).forEach(l=>{if(l&&l.text&&l.bbox)out.push({text:l.text.replace(/\s+/g,' ').trim(),bbox:l.bbox})})));
+ return out.filter(x=>x.text).sort((a,b)=>(a.bbox.y0-b.bbox.y0)||(a.bbox.x0-b.bbox.x0))
+}
+function codeFromAnyLine(s){
+ const arr=String(s||'').match(/[0-9OIL]{7,8}/gi)||[];
+ for(const x of arr){const cc=code(x);if(cc.length>=7)return cc}
+ return ''
+}
+function qtyFromStructuredLine(s){
+ const raw=String(s||''),nrm=normOcr(raw);
+ if(!/toplam/.test(nrm)||!/mik/.test(nrm)||/tutar/.test(nrm))return null;
+ const mi=nrm.indexOf('mik'),tail=mi>=0?raw.slice(Math.max(0,mi-2)):raw;
+ const nums=tail.match(/[+\-]?\s*\d+(?:[.,]\d+)?/g);
+ if(!nums||!nums.length)return null;
+ return parseQtyValue(nums[0])
+}
+function nameFromStructuredBand(lines,c){
+ for(const l of lines){
+   const n=normOcr(l.text);
+   if(/aciklama|açiklama|açıklama/.test(n)){
+     let s=l.text.replace(/^.*?(?:a[cç][iıİI1l]klama)\s*[:=]?\s*/i,'').trim();
+     s=s.replace(/\s+(?:birim|toplam\s*m[iıİI1l]k\w*|toplam\s*tutar).*$/i,'').trim();
+     if(s.length>=3)return s
+   }
+ }
+ return productNameFromBlock(lines.map(x=>x.text).join(' '),c)
+}
+function parsePrevStructured(text,blocks){
+ const L=flattenOcrLines(blocks);
+ if(!L.length)return parsePrev(text);
+ const starts=[];
+ for(let i=0;i<L.length;i++){const cc=productCodeFromLine(L[i].text)||codeFromAnyLine(L[i].text);if(cc.length>=7)starts.push({i,c:cc,y:L[i].bbox.y0})}
+ if(!starts.length)return parsePrev(text);
+ const rows=[];
+ for(let k=0;k<starts.length;k++){
+   const cur=starts[k],next=starts[k+1];
+   const y0=k===0?Math.max(0,cur.y-12):Math.floor((starts[k-1].y+cur.y)/2);
+   const y1=next?Math.floor((cur.y+next.y)/2):cur.y+Math.max(60,(k?cur.y-starts[k-1].y:80));
+   const band=L.filter(x=>{const cy=(x.bbox.y0+x.bbox.y1)/2;return cy>=y0&&cy<y1});
+   let q=null;
+   for(const l of band){q=qtyFromStructuredLine(l.text);if(q!=null)break}
+   if(q==null){
+     const joined=band.map(x=>x.text).join(' ');
+     q=quantityAfterLabel(joined)
+   }
+   if(q==null)continue;
+   const name=nameFromStructuredBand(band,cur.c)||('Ürün '+cur.c);
+   rows.push({code:cur.c,name,qty:q,unit:unitFromBlock(band.map(x=>x.text).join(' '))})
+ }
+ const M=new Map();rows.forEach(r=>M.set(r.code,r));
+ const parsed={kind:'prev',rows:Array.from(M.values())};
+ return parsed.rows.length?parsed:parsePrev(text)
+}
 function parsePrev(t){
   const L=lines(t),starts=[];
   for(let i=0;i<L.length;i++){const c=productCodeFromLine(L[i]);if(c.length>=7)starts.push({i,c})}
@@ -156,7 +212,7 @@ async function recognizeLabelBest(base,w){
  }
  return best.t
 }
-async function scan(file){openM(LABEL[mode]+' fotoğrafı','Fotoğraf okunuyor…');preview=URL.createObjectURL(file);E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="status-box">OCR hazırlanıyor…</div>';try{const c=await prep(file),w=await getWorker();if(mode==='label'){raw=await recognizeLabelBest(c,w)}else{const r=await w.recognize(c);raw=r.data.text||''}parsed=mode==='prev'?parsePrev(raw):mode==='label'?parseLabel(raw):parseMove(raw,mode);E.bar.style.width='100%';confirmUI()}catch(e){E.body.innerHTML+='<div class="status-box" style="color:#992c2c">Okuma başarısız: '+esc(e.message||e)+'</div>'}}
+async function scan(file){openM(LABEL[mode]+' fotoğrafı','Fotoğraf okunuyor…');preview=URL.createObjectURL(file);E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="status-box">OCR hazırlanıyor…</div>';try{const target=mode==='prev'?2500:(mode==='label'?2200:1900),c=await prep(file,target),w=await getWorker();if(mode==='label'){raw=await recognizeLabelBest(c,w);parsed=parseLabel(raw)}else if(mode==='prev'){E.sub.textContent='Önceki sayım satırları ayrıştırılıyor…';const r=await w.recognize(c,{}, {text:true,blocks:true});raw=r.data.text||'';parsed=parsePrevStructured(raw,r.data.blocks||[])}else{const r=await w.recognize(c);raw=r.data.text||'';parsed=parseMove(raw,mode)}E.bar.style.width='100%';confirmUI()}catch(e){E.body.innerHTML+='<div class="status-box" style="color:#992c2c">Okuma başarısız: '+esc(e.message||e)+'</div>'}}
 function confirmUI(){
  E.sub.textContent='Okunan bilgileri kontrol et; gerekirse düzelt.';
  if(parsed.kind==='label'){
