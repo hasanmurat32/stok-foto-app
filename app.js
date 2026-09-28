@@ -34,9 +34,55 @@ async function getWorker(){if(worker)return worker;await loadOCR();worker=await 
 async function prep(file){const b=await createImageBitmap(file),sc=Math.min(2,1900/b.width),w=Math.round(b.width*sc),h=Math.round(b.height*sc),c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(b,0,0,w,h);b.close&&b.close();const im=x.getImageData(0,0,w,h),d=im.data;for(let i=0;i<d.length;i+=4){let g=.299*d[i]+.587*d[i+1]+.114*d[i+2];g=Math.max(0,Math.min(255,(g-128)*1.35+128));d[i]=d[i+1]=d[i+2]=g}x.putImageData(im,0,0);return c}
 function lines(t){return String(t||'').split(/\r?\n/).map(s=>s.replace(/[|]/g,' ').replace(/\s+/g,' ').trim()).filter(Boolean)}
 function findCode(t){for(const l of lines(t)){if(/malzeme/i.test(l)&&/kod/i.test(l)){const m=l.match(/[0-9OIL]{7,8}/);if(m)return code(m[0])}}const m=String(t).match(/[0-9OIL]{7,8}/);return m?code(m[0]):''}
-function findTotal(t){for(const l of lines(t)){if(/toplam/i.test(l)&&/miktar/i.test(l)){const a=l.match(/[+\-]?\s*\d{1,6}/g);if(a&&a.length)return Number(a[a.length-1].replace(/\s/g,''))}}return null}
+function parseQtyValue(v){if(v==null)return null;let s=String(v).trim().replace(/\s/g,'');if(!s)return null;const neg=s.startsWith('-');s=s.replace(/^[+\-]/,'');if(s.includes(',')){s=s.replace(/\./g,'').replace(',','.')}else{const parts=s.split('.');if(parts.length>2)s=parts.join('');}const x=Number((neg?'-':'')+s);return Number.isFinite(x)?x:null}
+function quantityAfterLabel(t){
+  const src=String(t||'').replace(/\s+/g,' ');
+  const re=/toplam\s*m[iıİI1l]ktar\s*[:=]?\s*([+\-]?\s*\d+(?:[.,]\d+)?)/i;
+  const m=src.match(re);
+  return m?parseQtyValue(m[1]):null
+}
+function findTotal(t){
+  const q=quantityAfterLabel(t);
+  if(q!=null)return q;
+  for(const l of lines(t)){
+    if(/toplam/i.test(l)&&/m[iıİI1l]ktar/i.test(l)&&!/tutar/i.test(l)){
+      const a=l.match(/[+\-]?\s*\d+(?:[.,]\d+)?/g);
+      if(a&&a.length)return parseQtyValue(a[0]);
+    }
+  }
+  return null
+}
 function parseMove(t,m){const c=findCode(t),p=st.products[c],q=findTotal(t);return{kind:'move',mode:m,code:c,name:p?p.name:(c?'Ürün '+c:''),qty:q,dir:q!=null&&q<0?-1:1}}
-function parsePrev(t){const L=lines(t),rows=[];for(let i=0;i<L.length;i++){const mm=L[i].match(/[0-9OIL]{7,8}/);if(!mm)continue;const c=code(mm[0]);if(c.length<7)continue;let name=L[i].slice(mm.index+mm[0].length).replace(/açıklama/ig,'').trim();let q=null;for(let j=i;j<Math.min(L.length,i+4);j++){if(/toplam/i.test(L[j])&&/miktar/i.test(L[j])){const a=L[j].match(/\d{1,5}/g);if(a)q=Number(a[a.length-1])}}if(q==null){const a=L[i].match(/\s(\d{1,4})\s*(?:ADET|ADT)?\s*$/i);if(a)q=Number(a[1])}if(q!=null)rows.push({code:c,name:name||('Ürün '+c),qty:q})}const M=new Map();rows.forEach(r=>M.set(r.code,r));return{kind:'prev',rows:Array.from(M.values())}}
+function productCodeFromLine(l){
+  const strict=l.match(/(?:ürün|urun)\s*kodu?\s*[:=]?\s*([0-9OIL]{7,8})/i);
+  if(strict)return code(strict[1]);
+  if(/(?:ürün|urun)/i.test(l)&&/kod/i.test(l)){const m=l.match(/[0-9OIL]{7,8}/);return m?code(m[0]):''}
+  return ''
+}
+function productNameFromBlock(block,c){
+  let s=String(block||'').replace(/\s+/g,' ');
+  const pos=s.search(new RegExp(c.replace(/^0+/,'0*'),'i'));
+  if(pos>=0)s=s.slice(pos+c.length);
+  s=s.replace(/^.*?(?:a[cç][iıİI1l]klama)\s*[:=]?\s*/i,'');
+  const cut=s.search(/\s+(?:birim|koli\s*[iıİI1l][cç]i|koli\s*miktar|koli\s*d[iıİI1l][sş]i|toplam\s*m[iıİI1l]ktar|toplam\s*tutar)\b/i);
+  if(cut>=0)s=s.slice(0,cut);
+  return s.replace(/^[\-:]+|[\-:]+$/g,'').trim()
+}
+function parsePrev(t){
+  const L=lines(t),starts=[];
+  for(let i=0;i<L.length;i++){const c=productCodeFromLine(L[i]);if(c.length>=7)starts.push({i,c})}
+  const rows=[];
+  for(let k=0;k<starts.length;k++){
+    const cur=starts[k],end=k+1<starts.length?starts[k+1].i:Math.min(L.length,cur.i+5);
+    const block=L.slice(cur.i,end).join(' ');
+    const q=quantityAfterLabel(block);
+    if(q==null)continue;
+    const name=productNameFromBlock(block,cur.c)||('Ürün '+cur.c);
+    rows.push({code:cur.c,name,qty:q})
+  }
+  const M=new Map();rows.forEach(r=>M.set(r.code,r));
+  return{kind:'prev',rows:Array.from(M.values())}
+}
 async function scan(file){openM(LABEL[mode]+' fotoğrafı','Fotoğraf okunuyor…');preview=URL.createObjectURL(file);E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="status-box">OCR hazırlanıyor…</div>';try{const c=await prep(file),w=await getWorker(),r=await w.recognize(c);raw=r.data.text||'';parsed=mode==='prev'?parsePrev(raw):parseMove(raw,mode);E.bar.style.width='100%';confirmUI()}catch(e){E.body.innerHTML+='<div class="status-box" style="color:#992c2c">Okuma başarısız: '+esc(e.message||e)+'</div>'}}
 function confirmUI(){
  E.sub.textContent='Okunan bilgileri kontrol et; gerekirse düzelt.';
