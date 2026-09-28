@@ -27,3 +27,5 @@ button,input{font:inherit} button{cursor:pointer}.topbar{position:sticky;top:0;z
 @media(max-width:520px){.fire-summary{grid-template-columns:1fr 1fr}.fire-item{align-items:flex-start}.fire-item-qty{font-size:17px}}
 
 .amount-input{min-width:0}
+
+button:disabled{opacity:.45;cursor:not-allowed}
