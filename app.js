@@ -9,6 +9,7 @@ const E={cam:$('#cameraInput'),modal:$('#scanModal'),title:$('#modalTitle'),sub:
 function fresh(){return{version:5,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY))||fresh();d.settings=d.settings||{};if(!Array.isArray(d.settings.users)||d.settings.users.length!==3)d.settings.users=['Murat','Yardımcı 1','Yardımcı 2'];d.settings.activeUser=Math.max(0,Math.min(2,Number(d.settings.activeUser)||0));if(!Array.isArray(d.history))d.history=[];if(!Array.isArray(d.snapshots))d.snapshots=[];d.products=d.products||{};Object.values(d.products).forEach(p=>{if(p.waste==null)p.waste=0;if(p.otherNet==null)p.otherNet=0;if(p.previousAmount==null)p.previousAmount='';if(p.unitPrice==null||!Number.isFinite(Number(p.unitPrice))||Number(p.unitPrice)<0)p.unitPrice=(n(p.previous)>0&&n(p.previousAmount)>0)?n(p.previousAmount)/n(p.previous):0;if(!p.unit)p.unit='ADET'});if(!Array.isArray(d.fireLog)){d.fireLog=d.history.filter(h=>h.type==='fire').map(h=>{const p=d.products[h.code]||{};return{at:h.at,user:h.user||'',code:h.code,name:h.name||p.name||'',unit:h.unit||p.unit||'ADET',qty:Math.abs(n(h.newv)-n(h.oldv)),cumulative:n(h.newv)}})}d.fireLog.forEach(x=>{const p=d.products[x.code]||{},up=Number(x.unitPrice)>0?Number(x.unitPrice):calcUnitPrice(p);if(x.unitPrice==null)x.unitPrice=up;if(x.amount==null)x.amount=n(x.qty)*up});d.version=6;return d}catch(e){return fresh()}}
 function save(){localStorage.setItem(KEY,JSON.stringify(st));render()}
+function finishSave(message){closeM();save();if(message)toast(message)}
 function n(v){v=Number(v);return Number.isFinite(v)?v:0}
 function fmtQty(v){return new Intl.NumberFormat('tr-TR',{maximumFractionDigits:3}).format(n(v))}
 function fmtTL(v){return new Intl.NumberFormat('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n(v))+' TL'}
@@ -263,34 +264,70 @@ function openProductEdit(c){
  const valid=()=>E.save.disabled=!$('#editProductName').value.trim();$('#editProductName').oninput=valid;valid()
 }
 function openWaste(prefill){
- openM('Fire Girişi','Girilen fire miktarının TL tutarı otomatik hesaplanır. Tartılı ürünlerde birim KG seçilir.');
+ openM('Fire Girişi','Kaydedince pencere otomatik kapanır. Stokta olmayan ürün de Önceki = 0 ile oluşturulabilir.');
  E.bar.style.width='100%';
  parsed={kind:'fire'};
  const codes=Object.values(st.products).sort((a,b)=>a.code.localeCompare(b.code));
- E.body.innerHTML='<div class="confirm-grid"><div class="field"><label>Ürün Kodu</label><input id="fireCode" list="fireProducts" inputmode="numeric" value="'+esc(prefill||'')+'" placeholder="Örn. 0200367"><datalist id="fireProducts">'+codes.map(p=>'<option value="'+p.code+'">'+esc(p.name)+'</option>').join('')+'</datalist></div><div id="fireProductInfo" class="status-box">Ürün kodunu seç veya yaz.</div><div class="field"><label>Birim</label><select id="fireUnit"><option value="ADET">ADET</option><option value="KG">KG</option></select></div><div class="field"><label>Birim Fiyat (TL)</label><input id="fireUnitPrice" type="text" inputmode="decimal" placeholder="Önceki sayımdan otomatik gelir"></div><div class="field"><label>Fire Miktarı</label><input id="fireQty" type="text" inputmode="decimal" placeholder="Örn. 2 veya 1,250"></div><div id="firePreview" class="status-box">Miktarı girince fire tutarı hesaplanır.</div></div>';
+ E.body.innerHTML='<div class="confirm-grid"><div class="field"><label>Ürün Kodu</label><input id="fireCode" list="fireProducts" inputmode="numeric" value="'+esc(prefill||'')+'" placeholder="Örn. 0200367"><datalist id="fireProducts">'+codes.map(p=>'<option value="'+p.code+'">'+esc(p.name)+'</option>').join('')+'</datalist></div><div class="field"><label>Ürün Adı</label><input id="fireName" placeholder="Stokta yoksa isteğe bağlı ürün adı"></div><div id="fireProductInfo" class="status-box">Ürün kodunu seç veya yaz.</div><div class="field"><label>Birim</label><select id="fireUnit"><option value="ADET">ADET</option><option value="KG">KG</option></select></div><div class="field"><label>Birim Fiyat (TL)</label><input id="fireUnitPrice" type="text" inputmode="decimal" placeholder="Önceki sayımdan otomatik gelir"></div><div class="field"><label>Fire Miktarı</label><input id="fireQty" type="text" inputmode="decimal" placeholder="Örn. 2 veya 0,500"></div><div id="firePreview" class="status-box">Miktarı girince fire tutarı hesaplanır.</div></div>';
  const refresh=()=>{
    const fc=code($('#fireCode').value),p=st.products[fc],q0=parseQtyValue($('#fireQty').value),q=q0==null?NaN:Math.abs(q0);
    if(p){
+     if(document.activeElement!==$('#fireName'))$('#fireName').value=p.name||'';
      if(document.activeElement!==$('#fireUnit'))$('#fireUnit').value=p.unit||'ADET';
      const auto=calcUnitPrice(p);
      if(document.activeElement!==$('#fireUnitPrice')&&!$('#fireUnitPrice').value&&auto>0)$('#fireUnitPrice').value=String(Number(auto.toFixed(4)));
      const up0=parseQtyValue($('#fireUnitPrice').value),up=up0==null?0:Math.abs(up0),u=$('#fireUnit').value,value=Number.isFinite(q)&&q>0?q*up:0;
-     $('#fireProductInfo').innerHTML='<b>'+esc(p.name)+'</b><br>'+p.code+' · Birim: '+u+' · Mevcut fire: '+fmtQty(p.waste)+' '+u+(auto>0?' · Önceki sayımdan fiyat: '+fmtTL(auto):'');
-     $('#firePreview').textContent=Number.isFinite(q)&&q>0?'Eklenecek fire: '+fmtQty(q)+' '+u+' · Fire tutarı: '+fmtTL(value)+' · Yeni fire toplamı: '+fmtQty(n(p.waste)+q)+' '+u:'Fire miktarını gir. Fiyat yoksa birim fiyatı elle yazabilirsin.';
+     $('#fireProductInfo').innerHTML='<b>'+esc(p.name)+'</b><br>'+p.code+' · Birim: '+u+' · Mevcut fire: '+fmtQty(p.waste)+' '+u+(auto>0?' · Kayıtlı fiyat: '+fmtTL(auto):'');
+     $('#firePreview').textContent=Number.isFinite(q)&&q>0?'Eklenecek fire: '+fmtQty(q)+' '+u+' · Fire tutarı: '+fmtTL(value)+' · Yeni fire toplamı: '+fmtQty(n(p.waste)+q)+' '+u:'Fire miktarını gir.';
      E.save.disabled=!(Number.isFinite(q)&&q>0&&up>0)
    }else{
-     $('#fireProductInfo').textContent=fc?'Bu ürün kodu önceki stok listesinde bulunamadı.':'Ürün kodunu seç veya yaz.';
-     $('#firePreview').textContent='Fire yalnız mevcut ürün koduna işlenir.';E.save.disabled=true
+     const validCode=fc.length>=7,up0=parseQtyValue($('#fireUnitPrice').value),up=up0==null?0:Math.abs(up0),u=$('#fireUnit').value,value=Number.isFinite(q)&&q>0?q*up:0;
+     $('#fireProductInfo').innerHTML=validCode?'<b>Yeni ürün olarak kaydedilecek.</b><br>'+fc+' · Önceki = 0 · Birim: '+u:'Ürün kodunu seç veya yaz.';
+     $('#firePreview').textContent=validCode&&Number.isFinite(q)&&q>0?'Fire: '+fmtQty(q)+' '+u+' · Tutar: '+fmtTL(value)+' · Kaydedince ürün stok listesine de eklenir.':'Kod, birim fiyat ve fire miktarını gir.';
+     E.save.disabled=!(validCode&&Number.isFinite(q)&&q>0&&up>0)
    }
  };
- $('#fireCode').oninput=()=>{$('#fireUnitPrice').value='';refresh()};$('#fireQty').oninput=refresh;$('#fireUnitPrice').oninput=refresh;$('#fireUnit').onchange=refresh;refresh()
+ $('#fireCode').oninput=()=>{$('#fireUnitPrice').value='';refresh()};$('#fireName').oninput=refresh;$('#fireQty').oninput=refresh;$('#fireUnitPrice').oninput=refresh;$('#fireUnit').onchange=refresh;refresh()
 }
 function saveScan(){
- if(parsed&&parsed.kind==='editProduct'){const p=st.products[parsed.code],name=$('#editProductName').value.trim(),unit=normUnit($('#editProductUnit').value);if(!p||!name)return;const oldName=p.name,oldUnit=p.unit||'ADET';p.name=name;p.unit=unit;p.nameSource='confirmed';hist('label',p,'product',oldName+' / '+oldUnit,name+' / '+unit,'Ürün adı/birimi elle doğrulandı');save();closeM();toast(p.code+' ürün bilgisi düzeltildi');return}
- if(parsed&&parsed.kind==='label'){const lc=code($('#lc').value),name=$('#ln').value.trim(),unit=normUnit($('#lu').value);if(lc.length<7||!name)return;const existed=!!st.products[lc],p=ensure(lc,name,unit,true);p.nameSource='confirmed';hist('label',p,'product',existed?'mevcut':'yeni','kayıt',existed?'Etiket bilgisi doğrulandı':'Yeni ürün etiketten kaydedildi · Önceki 0');save();closeM();toast(lc+(existed?' adı doğrulandı':' yeni ürün kaydedildi'));return}
- if(parsed&&parsed.kind==='fire'){const fc=code($('#fireCode').value),p=st.products[fc],q0=parseQtyValue($('#fireQty').value),up0=parseQtyValue($('#fireUnitPrice').value),q=q0==null?NaN:Math.abs(q0),up=up0==null?0:Math.abs(up0);if(!p||!Number.isFinite(q)||q<=0||up<=0)return;p.unit=normUnit($('#fireUnit').value);p.unitPrice=up;const amount=q*up,old=n(p.waste);p.waste=old+q;const at=new Date().toISOString(),user=st.settings.users[st.settings.activeUser]||'Kullanıcı';st.fireLog.push({at,user,code:p.code,name:p.name,unit:p.unit,qty:q,unitPrice:up,amount,cumulative:p.waste});hist('fire',p,'waste',old,p.waste,'Fire +'+fmtQty(q)+' '+p.unit+' · '+fmtTL(amount));save();closeM();toast(p.code+' fire -'+fmtQty(q)+' '+p.unit+' · '+fmtTL(amount));return}
- if(parsed.kind==='prev'){let k=0;parsed.rows.forEach(r=>{const c=code(r.code),q=Number(r.qty);if(c.length<7||!Number.isFinite(q))return;const p=ensure(c,r.name,r.unit,false),o=p.previous;p.previous=q;p.previousAmount=r.amount===''?'':n(r.amount);if(q>0&&p.previousAmount!=='')p.unitPrice=n(p.previousAmount)/q;hist('prev',p,'previous',o,q,'Önceki sayım '+q+(p.previousAmount!==''?' · Tutar '+p.previousAmount+' TL':''));k++});save();closeM();toast(k+' ürün kaydedildi');return}
- const c=code($('#mc').value),name=$('#mn').value.trim(),q=Math.abs(Number($('#mq').value)),p=ensure(c,name,null,false);if(!p||!Number.isFinite(q))return;let f='',v=q;if(parsed.mode==='101')f='in101';if(parsed.mode==='251')f='sales251';if(parsed.mode==='301'){f='transfer301';v=q*(parsed.dir||1)}const o=p[f];p[f]=v;hist(parsed.mode,p,f,o,v,LABEL[parsed.mode]+' '+signed(v));save();closeM();toast(c+' güncellendi · olması gereken '+exp(p))
+ if(parsed&&parsed.kind==='editProduct'){
+   const p=st.products[parsed.code],name=$('#editProductName').value.trim(),unit=normUnit($('#editProductUnit').value);
+   if(!p||!name){toast('Ürün adı gerekli');return}
+   const oldName=p.name,oldUnit=p.unit||'ADET';p.name=name;p.unit=unit;p.nameSource='confirmed';
+   hist('label',p,'product',oldName+' / '+oldUnit,name+' / '+unit,'Ürün adı/birimi elle doğrulandı');
+   finishSave(p.code+' ürün bilgisi düzeltildi');return
+ }
+ if(parsed&&parsed.kind==='label'){
+   const lc=code($('#lc').value),name=$('#ln').value.trim(),unit=normUnit($('#lu').value);
+   if(lc.length<7||!name){toast('Ürün kodu ve adı gerekli');return}
+   const existed=!!st.products[lc],p=ensure(lc,name,unit,true);p.nameSource='confirmed';
+   hist('label',p,'product',existed?'mevcut':'yeni','kayıt',existed?'Etiket bilgisi doğrulandı':'Yeni ürün etiketten kaydedildi · Önceki 0');
+   finishSave(lc+(existed?' adı doğrulandı':' yeni ürün kaydedildi'));return
+ }
+ if(parsed&&parsed.kind==='fire'){
+   const fc=code($('#fireCode').value),name=$('#fireName').value.trim(),q0=parseQtyValue($('#fireQty').value),up0=parseQtyValue($('#fireUnitPrice').value),q=q0==null?NaN:Math.abs(q0),up=up0==null?0:Math.abs(up0),unit=normUnit($('#fireUnit').value);
+   if(fc.length<7){toast('Geçerli ürün kodu gir');return}
+   if(!Number.isFinite(q)||q<=0){toast('Fire miktarını kontrol et');return}
+   if(up<=0){toast('Birim fiyatı kontrol et');return}
+   const existed=!!st.products[fc],p=ensure(fc,name,unit,false);p.unit=unit;p.unitPrice=up;
+   if(name&&(!existed||p.nameSource!=='confirmed'))p.name=name;
+   const amount=q*up,old=n(p.waste);p.waste=old+q;
+   const at=new Date().toISOString(),user=st.settings.users[st.settings.activeUser]||'Kullanıcı';
+   st.fireLog.push({at,user,code:p.code,name:p.name,unit:p.unit,qty:q,unitPrice:up,amount,cumulative:p.waste});
+   hist('fire',p,'waste',old,p.waste,'Fire +'+fmtQty(q)+' '+p.unit+' · '+fmtTL(amount)+(existed?'':' · yeni ürün'));
+   finishSave(p.code+' fire kaydedildi · '+fmtTL(amount));return
+ }
+ if(parsed.kind==='prev'){
+   let k=0;
+   parsed.rows.forEach(r=>{const c=code(r.code),q=Number(r.qty);if(c.length<7||!Number.isFinite(q))return;const p=ensure(c,r.name,r.unit,false),o=p.previous;p.previous=q;p.previousAmount=r.amount===''?'':n(r.amount);if(q>0&&p.previousAmount!=='')p.unitPrice=n(p.previousAmount)/q;hist('prev',p,'previous',o,q,'Önceki sayım '+q+(p.previousAmount!==''?' · Tutar '+p.previousAmount+' TL':''));k++});
+   if(!k){toast('Kaydedilecek geçerli satır yok');return}
+   finishSave(k+' ürün kaydedildi');return
+ }
+ const c=code($('#mc').value),name=$('#mn').value.trim(),q=Math.abs(Number($('#mq').value)),p=ensure(c,name,null,false);
+ if(!p||!Number.isFinite(q)){toast('Ürün kodu veya miktarı kontrol et');return}
+ let f='',v=q;if(parsed.mode==='101')f='in101';if(parsed.mode==='251')f='sales251';if(parsed.mode==='301'){f='transfer301';v=q*(parsed.dir||1)}
+ const o=p[f];p[f]=v;hist(parsed.mode,p,f,o,v,LABEL[parsed.mode]+' '+signed(v));
+ finishSave(c+' güncellendi · olması gereken '+fmtQty(exp(p))+' '+(p.unit||'ADET'))
 }
 function currentSnapshot(){
  const at=new Date().toISOString(),user=st.settings.users[st.settings.activeUser]||'Kullanıcı';
