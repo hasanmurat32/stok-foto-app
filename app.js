@@ -89,9 +89,19 @@ function labelCode(t){
  const m=String(t||'').match(/(?:^|\D)([0-9OIL]{7,8})(?!\d)/);return m?code(m[1]):''
 }
 function labelName(t,c){
- const bad=/(?:barkod|barcode|fiyat|price|ürün\s*kod|urun\s*kod|malzeme\s*kod|toplam|tutar|birim|kdv|tl\b)/i;
- const cand=lines(t).map(x=>x.replace(c,'').replace(/(?:ürün\s*adı|urun\s*adi|açıklama|aciklama)\s*[:=]?/ig,'').trim()).filter(x=>x&&!bad.test(x)&&/[A-Za-zÇĞİÖŞÜçğıöşü]/.test(x)&&x.replace(/[^A-Za-zÇĞİÖŞÜçğıöşü]/g,'').length>=4).sort((a,b)=>b.length-a.length);
- return cand[0]||''
+ const bad=/(?:barkod|barcode|fiyat|price|ürün\s*kod|urun\s*kod|malzeme\s*kod|toplam|tutar|birim|kdv|tl\b|₺|f\.?d\.?tarihi|tarih|yerli\s*üretim|yerli\s*uretim|üretim|uretim|qr)/i;
+ const out=[];
+ for(const rawLine of lines(t)){
+   let x=rawLine.replace(c,'').replace(/(?:ürün\s*adı|urun\s*adi|açıklama|aciklama)\s*[:=]?/ig,'').trim();
+   if(!x||bad.test(x))continue;
+   if(/\b\d{7,8}\b/.test(x)||/^\d{3,5}$/.test(x))continue;
+   if(/^\d+[.,]?\d*\s*(?:₺|TL)$/i.test(x))continue;
+   const qty=/^\d+(?:[.,]\d+)?\s*(?:G|GR|KG|ML|L)$/i.test(x);
+   const letters=(x.match(/[A-Za-zÇĞİÖŞÜçğıöşü]/g)||[]).length;
+   if(letters>=4||qty)out.push(x);
+   if(out.length>=5)break;
+ }
+ return out.join(' ').replace(/\s+/g,' ').trim()
 }
 function parseLabel(t){const c=labelCode(t);return{kind:'label',code:c,name:labelName(t,c),unit:unitFromBlock(t)}}
 function parsePrev(t){
@@ -109,7 +119,35 @@ function parsePrev(t){
   const M=new Map();rows.forEach(r=>M.set(r.code,r));
   return{kind:'prev',rows:Array.from(M.values())}
 }
-async function scan(file){openM(LABEL[mode]+' fotoğrafı','Fotoğraf okunuyor…');preview=URL.createObjectURL(file);E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="status-box">OCR hazırlanıyor…</div>';try{const c=await prep(file),w=await getWorker(),r=await w.recognize(c);raw=r.data.text||'';parsed=mode==='prev'?parsePrev(raw):mode==='label'?parseLabel(raw):parseMove(raw,mode);E.bar.style.width='100%';confirmUI()}catch(e){E.body.innerHTML+='<div class="status-box" style="color:#992c2c">Okuma başarısız: '+esc(e.message||e)+'</div>'}}
+function rotateCanvas(src,deg){
+ const r=((deg%360)+360)%360,c=document.createElement('canvas'),swap=r===90||r===270;
+ c.width=swap?src.height:src.width;c.height=swap?src.width:src.height;
+ const x=c.getContext('2d');x.translate(c.width/2,c.height/2);x.rotate(r*Math.PI/180);x.drawImage(src,-src.width/2,-src.height/2);return c
+}
+function labelScore(t){
+ const p=parseLabel(t);let s=0;
+ if(p.code&&p.code.length>=7)s+=100;
+ if(p.name){s+=Math.min(50,p.name.length);if(/\b(?:G|GR|KG|ML|L)\b/i.test(p.name))s+=8}
+ const L=lines(t);s+=Math.min(20,L.filter(x=>/[A-Za-zÇĞİÖŞÜçğıöşü]{4}/.test(x)).length*4);
+ return s
+}
+async function recognizeLabelBest(base,w){
+ const tries=[0,90,270],out=[];
+ for(const deg of tries){
+   E.sub.textContent='Etiket yönü kontrol ediliyor · '+deg+'°';
+   const r=await w.recognize(deg?rotateCanvas(base,deg):base),t=r.data.text||'';
+   out.push({deg,t,score:labelScore(t)});
+   if(labelScore(t)>=125)break
+ }
+ let best=out.sort((a,b)=>b.score-a.score)[0]||{t:''};
+ if(best.score<100){
+   E.sub.textContent='Etiket yönü kontrol ediliyor · 180°';
+   const r=await w.recognize(rotateCanvas(base,180)),t=r.data.text||'',x={deg:180,t,score:labelScore(t)};
+   if(x.score>best.score)best=x
+ }
+ return best.t
+}
+async function scan(file){openM(LABEL[mode]+' fotoğrafı','Fotoğraf okunuyor…');preview=URL.createObjectURL(file);E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="status-box">OCR hazırlanıyor…</div>';try{const c=await prep(file),w=await getWorker();if(mode==='label'){raw=await recognizeLabelBest(c,w)}else{const r=await w.recognize(c);raw=r.data.text||''}parsed=mode==='prev'?parsePrev(raw):mode==='label'?parseLabel(raw):parseMove(raw,mode);E.bar.style.width='100%';confirmUI()}catch(e){E.body.innerHTML+='<div class="status-box" style="color:#992c2c">Okuma başarısız: '+esc(e.message||e)+'</div>'}}
 function confirmUI(){
  E.sub.textContent='Okunan bilgileri kontrol et; gerekirse düzelt.';
  if(parsed.kind==='label'){
