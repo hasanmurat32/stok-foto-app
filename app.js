@@ -5,9 +5,9 @@ const U={main:'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.mi
 const LABEL={prev:'Önceki Sayım','101':'101 Gelen','251':'251 Satan','301':'301 Transfer',fire:'Fire'};
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 let st=load(),mode='',parsed=null,raw='',worker=null,preview='';
-const E={cam:$('#cameraInput'),modal:$('#scanModal'),title:$('#modalTitle'),sub:$('#modalSub'),body:$('#scanBody'),save:$('#saveScanBtn'),cancel:$('#cancelScanBtn'),close:$('#closeModalBtn'),bar:$('#progressBar'),list:$('#stockList'),empty:$('#emptyState'),search:$('#searchInput'),pc:$('#productCount'),dc:$('#diffCount'),hist:$('#historyList'),date:$('#countDateInput'),net:$('#netBadge'),off:$('#offlineStatus'),toast:$('#toast')};
-function fresh(){return{version:3,settings:{countDate:'',offlineReady:false},products:{},history:[]}}
-function load(){try{return JSON.parse(localStorage.getItem(KEY))||fresh()}catch(e){return fresh()}}
+const E={cam:$('#cameraInput'),modal:$('#scanModal'),title:$('#modalTitle'),sub:$('#modalSub'),body:$('#scanBody'),save:$('#saveScanBtn'),cancel:$('#cancelScanBtn'),close:$('#closeModalBtn'),bar:$('#progressBar'),list:$('#stockList'),empty:$('#emptyState'),search:$('#searchInput'),pc:$('#productCount'),dc:$('#diffCount'),hist:$('#historyList'),date:$('#countDateInput'),net:$('#netBadge'),off:$('#offlineStatus'),toast:$('#toast'),user:$('#userSelect'),userNames:[$('#userName1'),$('#userName2'),$('#userName3')]};
+function fresh(){return{version:4,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[]}}
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY))||fresh();d.settings=d.settings||{};if(!Array.isArray(d.settings.users)||d.settings.users.length!==3)d.settings.users=['Murat','Yardımcı 1','Yardımcı 2'];d.settings.activeUser=Math.max(0,Math.min(2,Number(d.settings.activeUser)||0));if(!Array.isArray(d.history))d.history=[];if(!Array.isArray(d.snapshots))d.snapshots=[];d.products=d.products||{};Object.values(d.products).forEach(p=>{if(p.waste==null)p.waste=0;if(p.otherNet==null)p.otherNet=0});d.version=4;return d}catch(e){return fresh()}}
 function save(){localStorage.setItem(KEY,JSON.stringify(st));render()}
 function n(v){v=Number(v);return Number.isFinite(v)?v:0}
 function code(v){return String(v||'').toUpperCase().replace(/O/g,'0').replace(/[IL]/g,'1').replace(/\D/g,'').slice(0,8)}
@@ -18,7 +18,10 @@ function ensure(c,name){c=code(c);if(!c)return null;if(!st.products[c])st.produc
 function toast(t){E.toast.textContent=t;E.toast.classList.add('show');setTimeout(()=>E.toast.classList.remove('show'),2200)}
 function signed(v){v=n(v);return v>0?'+'+v:String(v)}
 function render(){
- E.date.value=st.settings.countDate||'';E.net.textContent=navigator.onLine?'Çevrimiçi':'Çevrimdışı';E.off.textContent=st.settings.offlineReady?'Çevrimdışı OCR hazır. İlk saha gününden önce uçak modunda dene.':'İlk kurulumda internet varken Çevrimdışı OCR’ı hazırla düğmesine bas.';
+ E.date.value=st.settings.countDate||'';
+ if(E.user){E.user.innerHTML=st.settings.users.map((u,i)=>'<option value="'+i+'">'+esc(u)+'</option>').join('');E.user.value=String(st.settings.activeUser)}
+ E.userNames.forEach((el,i)=>{if(el&&document.activeElement!==el)el.value=st.settings.users[i]||('Kullanıcı '+(i+1))});
+ E.net.textContent=navigator.onLine?'Çevrimiçi':'Çevrimdışı';E.off.textContent=st.settings.offlineReady?'Çevrimdışı OCR hazır. İlk saha gününden önce uçak modunda dene.':'İlk kurulumda internet varken Çevrimdışı OCR’ı hazırla düğmesine bas.';
  const q=(E.search.value||'').toLocaleLowerCase('tr-TR');const a=Object.values(st.products).filter(p=>(p.code+' '+p.name).toLocaleLowerCase('tr-TR').includes(q)).sort((x,y)=>x.code.localeCompare(y.code));
  E.pc.textContent=Object.keys(st.products).length;E.dc.textContent=Object.values(st.products).filter(p=>dif(p)!=null&&dif(p)!==0).length;E.empty.style.display=a.length?'none':'block';
  E.list.innerHTML=a.map(p=>{const d=dif(p),cl=d==null?'diff-wait':d===0?'diff-zero':'diff-bad',dt=d==null?'Gerçek sayım bekliyor':d===0?'Fark 0':'Fark '+signed(d);return '<article class="card stock-card" data-code="'+p.code+'"><div class="stock-top"><div><div class="stock-name">'+esc(p.name)+'</div><div class="stock-code">'+p.code+'</div></div><div class="expected"><strong>'+exp(p)+'</strong><span>OLMASI GEREKEN</span></div></div><div class="metrics"><div class="metric"><span>Önceki</span><b>'+n(p.previous)+'</b></div><div class="metric"><span>101 Gelen</span><b>'+n(p.in101)+'</b></div><div class="metric"><span>251 Satan</span><b>'+n(p.sales251)+'</b></div><div class="metric"><span>301 Transfer</span><b>'+signed(p.transfer301)+'</b></div><div class="metric"><span>Fire</span><b>-'+n(p.waste)+'</b></div><div class="metric"><span>Diğer Net</span><b>'+signed(p.otherNet)+'</b></div></div><div class="editable-row"><label>Diğer Net<input class="other-net" type="number" inputmode="numeric" value="'+n(p.otherNet)+'"></label><label>Gerçek Sayım<input class="actual" type="number" inputmode="numeric" value="'+(p.actual===''?'':p.actual)+'" placeholder="Sayım günü"></label><div class="diff-badge '+cl+'">'+dt+'</div></div><div class="stock-actions"><button class="small-action fire-add">+ Fire Ekle</button><button class="link-danger delete-product">Ürünü sil</button></div></article>'}).join('');
@@ -26,7 +29,7 @@ function render(){
  $$('.actual').forEach(x=>x.onchange=e=>{const p=st.products[e.target.closest('.stock-card').dataset.code];p.actual=e.target.value===''?'':n(e.target.value);save()});
  $$('.fire-add').forEach(x=>x.onclick=e=>openWaste(e.target.closest('.stock-card').dataset.code));
  $$('.delete-product').forEach(x=>x.onclick=e=>{const c=e.target.closest('.stock-card').dataset.code;if(confirm(c+' silinsin mi?')){delete st.products[c];save()}});
- E.hist.innerHTML=st.history.length?st.history.slice().reverse().map(h=>'<div class="card history-item"><div class="history-type">'+esc(LABEL[h.type]||h.type)+'</div><div><b>'+h.code+'</b> '+esc(h.name||'')+'<br><small>'+esc(h.note||'')+'</small></div></div>').join(''):'<div class="card empty">Henüz işlem geçmişi yok.</div>';
+ E.hist.innerHTML=st.history.length?st.history.slice().reverse().map(h=>'<div class="card history-item"><div class="history-type">'+esc(LABEL[h.type]||h.type)+'</div><div><b>'+h.code+'</b> '+esc(h.name||'')+'<br><small>'+esc(h.user||'Bilinmeyen')+' · '+esc(h.note||'')+'</small></div></div>').join(''):'<div class="card empty">Henüz işlem geçmişi yok.</div>';
 }
 function openM(t,s){E.title.textContent=t;E.sub.textContent=s||'';E.modal.classList.add('open');E.save.disabled=true;E.bar.style.width='0%'}
 function closeM(){E.modal.classList.remove('open');E.body.innerHTML='';parsed=null;raw='';E.save.style.display='';E.cancel.textContent='Vazgeç';if(preview){URL.revokeObjectURL(preview);preview=''}}
@@ -91,7 +94,7 @@ function confirmUI(){
  E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="confirm-grid"><div class="field"><label>Ürün Kodu</label><input id="mc" value="'+esc(parsed.code)+'" inputmode="numeric"></div><div class="field"><label>Ürün Adı</label><input id="mn" value="'+esc(parsed.name)+'"></div><div class="field"><label>Toplam Miktar</label><input id="mq" type="number" inputmode="numeric" value="'+(parsed.qty==null?'':Math.abs(parsed.qty))+'"></div>'+(parsed.mode==='301'?'<div class="field"><label>301 yönü</label><div class="direction"><button id="dp" class="'+(parsed.dir>0?'active':'')+'">+ Bize gelen</button><button id="dm" class="'+(parsed.dir<0?'active':'')+'">− Bizden giden</button></div></div>':'')+'<details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details></div>';const val=()=>E.save.disabled=!(code($('#mc').value).length>=7&&$('#mq').value!=='');$('#mc').oninput=val;$('#mq').oninput=val;if(parsed.mode==='301'){$('#dp').onclick=()=>{parsed.dir=1;confirmUI()};$('#dm').onclick=()=>{parsed.dir=-1;confirmUI()}}val()
 }
 function bindPrev(){$$('#prevRows .confirm-row').forEach(row=>{const i=Number(row.dataset.i),r=parsed.rows[i];row.querySelector('.code-input').oninput=e=>r.code=code(e.target.value);row.querySelector('.name-input').oninput=e=>r.name=e.target.value;row.querySelector('.qty-input').oninput=e=>r.qty=Number(e.target.value);row.querySelector('.remove-row').onclick=()=>{parsed.rows.splice(i,1);confirmUI()}})}
-function hist(type,p,field,oldv,newv,note){st.history.push({at:new Date().toISOString(),type,code:p.code,name:p.name,field,oldv,newv,note});if(st.history.length>500)st.history=st.history.slice(-500)}
+function hist(type,p,field,oldv,newv,note){const user=st.settings.users[st.settings.activeUser]||'Kullanıcı';st.history.push({at:new Date().toISOString(),user,type,code:p.code,name:p.name,field,oldv,newv,note});if(st.history.length>1000)st.history=st.history.slice(-1000)}
 function openWaste(prefill){
  openM('Fire Girişi','Aynı ürün kodundaki fireler otomatik toplanır ve stoktan düşer.');
  E.bar.style.width='100%';
@@ -106,16 +109,31 @@ function saveScan(){
  if(parsed.kind==='prev'){let k=0;parsed.rows.forEach(r=>{const c=code(r.code),q=Number(r.qty);if(c.length<7||!Number.isFinite(q))return;const p=ensure(c,r.name),o=p.previous;p.previous=q;hist('prev',p,'previous',o,q,'Önceki sayım '+q);k++});save();closeM();toast(k+' ürün kaydedildi');return}
  const c=code($('#mc').value),name=$('#mn').value.trim(),q=Math.abs(Number($('#mq').value)),p=ensure(c,name);if(!p||!Number.isFinite(q))return;let f='',v=q;if(parsed.mode==='101')f='in101';if(parsed.mode==='251')f='sales251';if(parsed.mode==='301'){f='transfer301';v=q*(parsed.dir||1)}const o=p[f];p[f]=v;hist(parsed.mode,p,f,o,v,LABEL[parsed.mode]+' '+signed(v));save();closeM();toast(c+' güncellendi · olması gereken '+exp(p))
 }
-function csv(){
- const rows=[['Ürün Kodu','Ürün Adı','Önceki Sayım','101 Gelen','251 Satan','301 Transfer','Fire','Diğer Net','Olması Gereken','Gerçek Sayım','Fark']];Object.values(st.products).sort((a,b)=>a.code.localeCompare(b.code)).forEach(p=>rows.push([p.code,p.name,p.previous,p.in101,p.sales251,p.transfer301,p.waste,p.otherNet,exp(p),p.actual,dif(p)==null?'':dif(p)]));return '\ufeff'+rows.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';')).join('\r\n')
+function currentSnapshot(){
+ const at=new Date().toISOString(),user=st.settings.users[st.settings.activeUser]||'Kullanıcı';
+ const rows=Object.values(st.products).sort((a,b)=>a.code.localeCompare(b.code)).map(p=>({code:p.code,name:p.name,previous:n(p.previous),in101:n(p.in101),sales251:n(p.sales251),transfer301:n(p.transfer301),waste:n(p.waste),otherNet:n(p.otherNet),expected:exp(p),actual:p.actual===''?'':n(p.actual),diff:dif(p)==null?'':dif(p)}));
+ return{at,user,rows}
+}
+function cumulativeCsv(){
+ const rows=[['Yedek Tarihi','Kullanıcı','Ürün Kodu','Ürün Adı','Önceki Sayım','101 Gelen','251 Satan','301 Transfer','Fire','Diğer Net','Olması Gereken','Gerçek Sayım','Fark']];
+ st.snapshots.forEach(s=>(s.rows||[]).forEach(p=>rows.push([s.at,s.user||'',p.code,p.name,p.previous,p.in101,p.sales251,p.transfer301,p.waste,p.otherNet,p.expected,p.actual,p.diff])));
+ return '\ufeff'+rows.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';')).join('\r\n')
+}
+function appendExcelBackup(){
+ st.snapshots.push(currentSnapshot());
+ if(st.snapshots.length>120)st.snapshots=st.snapshots.slice(-120);
+ localStorage.setItem(KEY,JSON.stringify(st));
+ const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+ dl(cumulativeCsv(),'stok-yedek-birikimli-'+stamp+'.csv','text/csv;charset=utf-8');
+ render();toast('Excel yedeğine yeni kayıt eklendi · toplam '+st.snapshots.length+' yedek')
 }
 function dl(data,name,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:type||'application/octet-stream'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function offline(){const b=$('#offlinePrepBtn');b.disabled=true;openM('Çevrimdışı OCR hazırlanıyor','İlk kez internet gerekir.');E.save.style.display='none';E.cancel.textContent='Kapat';E.body.innerHTML='<div class="status-box">OCR motoru ve Türkçe model indiriliyor…</div>';try{const w=await getWorker(),c=document.createElement('canvas');c.width=300;c.height=80;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,300,80);x.fillStyle='#000';x.font='30px Arial';x.fillText('0200367 160',10,50);await w.recognize(c);st.settings.offlineReady=true;save();E.body.innerHTML='<div class="status-box" style="color:#116236"><b>Hazır.</b> Çevrimdışı OCR kurulumu tamamlandı. Bu pencereyi kapatabilirsin.</div>'}catch(e){E.body.innerHTML='<div class="status-box" style="color:#992c2c">Hazırlama başarısız: '+esc(e.message||e)+'</div>'}finally{b.disabled=false}}
-$$('.scan-btn[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;E.cam.value='';E.cam.click()});$('#wasteEntryBtn').onclick=()=>openWaste('');E.cam.onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)scan(f)};E.save.onclick=saveScan;E.cancel.onclick=closeM;E.close.onclick=closeM;E.search.oninput=render;E.date.onchange=()=>{st.settings.countDate=E.date.value;save()};
+$$('.scan-btn[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;E.cam.value='';E.cam.click()});$('#wasteEntryBtn').onclick=()=>openWaste('');E.cam.onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)scan(f)};E.save.onclick=saveScan;E.cancel.onclick=closeM;E.close.onclick=closeM;E.search.oninput=render;E.date.onchange=()=>{st.settings.countDate=E.date.value;save()};if(E.user)E.user.onchange=()=>{st.settings.activeUser=Number(E.user.value)||0;save()};E.userNames.forEach((el,i)=>{if(el)el.onchange=()=>{const v=el.value.trim()||('Kullanıcı '+(i+1));st.settings.users[i]=v;save()}});
 $$('.tab').forEach(b=>b.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.tab-panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#tab-'+b.dataset.tab).classList.add('active')});
 $('#offlinePrepBtn').onclick=offline;$('#loadDemoBtn').onclick=()=>{const p=ensure('0200367','YOĞURT %4 YAĞLI 3000 G DOST');Object.assign(p,{previous:16,in101:160,sales251:149,transfer301:3,waste:0,otherNet:0,actual:''});save();toast('Yoğurt örneği: 30 adet')};
 $('#clearAllBtn').onclick=()=>{if(confirm('Tüm stok verisi silinsin mi?')){st=fresh();save()}};$('#clearHistoryBtn').onclick=()=>{if(confirm('Geçmiş silinsin mi?')){st.history=[];save()}};
-$('#exportXlsxBtn').textContent='Excel için CSV oluştur';$('#exportXlsxBtn').onclick=()=>dl(csv(),'stok-ozeti-'+new Date().toISOString().slice(0,10)+'.csv','text/csv;charset=utf-8');
+$('#exportXlsxBtn').onclick=appendExcelBackup;
 $('#exportBackupBtn').onclick=()=>dl(JSON.stringify(st,null,2),'stok-foto-yedek.json','application/json');$('#importBackupInput').onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!d.products)throw Error('Geçersiz yedek');st=d;save();toast('Yedek geri yüklendi')}catch(x){alert(x.message)}};
 window.addEventListener('online',render);window.addEventListener('offline',render);if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));render();
 })();
