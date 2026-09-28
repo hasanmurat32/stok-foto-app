@@ -39,12 +39,14 @@
       <button class="scan-btn sales" data-mode="251"><span>📷</span><b>251 Satan</b><small>Satış toplamını günceller</small></button>
       <button class="scan-btn transfer" data-mode="301"><span>📷</span><b>301 Transfer</b><small>+ gelen / - giden</small></button>
       <button id="wasteEntryBtn" class="scan-btn waste" type="button"><span>🗑️</span><b>Fire Girişi</b><small>Aynı kodu otomatik toplar ve düşer</small></button>
+      <button class="scan-btn label" data-mode="label"><span>🏷️</span><b>Yeni Ürün / Etiket</b><small>Sayımda olmayan ürünü kaydeder</small></button>
     </section>
     <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden>
 
     <nav class="tabs card">
       <button class="tab active" data-tab="stocks">Stoklar</button>
       <button class="tab" data-tab="history">Geçmiş</button>
+      <button class="tab" data-tab="fire">Fire</button>
       <button class="tab" data-tab="backup">Excel / Yedek</button>
       <button class="tab" data-tab="settings">Ayarlar</button>
     </nav>
@@ -65,6 +67,19 @@
         <button id="clearHistoryBtn" class="ghost danger">Geçmişi temizle</button>
       </div>
       <div id="historyList" class="history-list"></div>
+    </section>
+
+    <section id="tab-fire" class="tab-panel">
+      <div class="card section-head">
+        <div><h2>Fire Özeti</h2><p>Sayım sırasında toplam fireyi birime göre anında gör.</p></div>
+        <button id="exportFireBtn" class="secondary">Fire Excel / CSV indir</button>
+      </div>
+      <div class="fire-summary">
+        <div class="card fire-total"><span>Toplam Fire</span><b id="fireKgTotal">0 KG</b></div>
+        <div class="card fire-total"><span>Toplam Fire</span><b id="fireAdetTotal">0 ADET</b></div>
+      </div>
+      <div id="fireList" class="stock-list"></div>
+      <div id="fireEmpty" class="card empty">Henüz fire kaydı yok.</div>
     </section>
 
     <section id="tab-backup" class="tab-panel">
