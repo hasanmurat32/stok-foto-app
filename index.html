@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17365D">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Stok Foto">
+  <title>Stok Foto</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="brand">STOK FOTO</div>
+      <div class="subtitle">Fotoğraftan teorik stok hesabı</div>
+    </div>
+    <div id="netBadge" class="badge">Bağlantı kontrol ediliyor</div>
+  </header>
+
+  <main class="container">
+    <section class="hero card">
+      <div>
+        <h1>Fotoğrafı çek, miktarı kontrol et, stok kendisi hesaplansın.</h1>
+        <p>101 gelen, 251 satan, 301 transfer. 301'de + bize gelen, - bizden giden.</p>
+      </div>
+      <div class="formula">Önceki + 101 − 251 + 301 + Diğer Net = Olması Gereken</div>
+    </section>
+
+    <section class="scan-grid">
+      <button class="scan-btn prev" data-mode="prev"><span>📷</span><b>Önceki Sayım</b><small>Birden fazla ürünü okuyabilir</small></button>
+      <button class="scan-btn incoming" data-mode="101"><span>📷</span><b>101 Gelen</b><small>Toplam miktarı günceller</small></button>
+      <button class="scan-btn sales" data-mode="251"><span>📷</span><b>251 Satan</b><small>Satış toplamını günceller</small></button>
+      <button class="scan-btn transfer" data-mode="301"><span>📷</span><b>301 Transfer</b><small>+ gelen / - giden</small></button>
+    </section>
+    <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden>
+
+    <nav class="tabs card">
+      <button class="tab active" data-tab="stocks">Stoklar</button>
+      <button class="tab" data-tab="history">Geçmiş</button>
+      <button class="tab" data-tab="backup">Excel / Yedek</button>
+      <button class="tab" data-tab="settings">Ayarlar</button>
+    </nav>
+
+    <section id="tab-stocks" class="tab-panel active">
+      <div class="toolbar card">
+        <input id="searchInput" type="search" placeholder="Ürün kodu veya ürün adı ara…">
+        <div class="summary-box"><b id="productCount">0</b><span>ürün</span></div>
+        <div class="summary-box"><b id="diffCount">0</b><span>farklı</span></div>
+      </div>
+      <div id="stockList" class="stock-list"></div>
+      <div id="emptyState" class="card empty">Henüz ürün yok. Önceki sayım fotoğrafıyla başlayabilirsin.</div>
+    </section>
+
+    <section id="tab-history" class="tab-panel">
+      <div class="card section-head">
+        <div><h2>İşlem geçmişi</h2><p>Yanlış bir okuma olursa kaydı silebilir ve değeri geri alabilirsin.</p></div>
+        <button id="clearHistoryBtn" class="ghost danger">Geçmişi temizle</button>
+      </div>
+      <div id="historyList" class="history-list"></div>
+    </section>
+
+    <section id="tab-backup" class="tab-panel">
+      <div class="card action-list">
+        <h2>Excel ve yedek</h2>
+        <button id="exportXlsxBtn" class="primary">Excel (.xlsx) oluştur</button>
+        <button id="exportBackupBtn" class="secondary">Tam yedek (.json) oluştur</button>
+        <label class="secondary file-label">Yedek geri yükle<input id="importBackupInput" type="file" accept="application/json,.json" hidden></label>
+        <p class="note">Telefon değiştirirken JSON yedeğini yeni telefona aktarıp buradan geri yükleyebilirsin.</p>
+      </div>
+    </section>
+
+    <section id="tab-settings" class="tab-panel">
+      <div class="card settings-grid">
+        <h2>Ayarlar</h2>
+        <label>Önceki sayım tarihi
+          <input id="countDateInput" type="date">
+        </label>
+        <button id="offlinePrepBtn" class="primary">Çevrimdışı OCR'ı hazırla</button>
+        <div id="offlineStatus" class="status-box">İlk kurulumda internet varken bu düğmeye bir kez bas.</div>
+        <button id="loadDemoBtn" class="secondary">Yoğurt örneğini yükle (30 adet)</button>
+        <button id="clearAllBtn" class="ghost danger">Tüm stok verisini sil</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="scanModal" class="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div><b id="modalTitle">Fotoğraf okunuyor</b><div id="modalSub" class="muted"></div></div>
+        <button id="closeModalBtn" class="icon-btn" aria-label="Kapat">✕</button>
+      </div>
+      <div id="progressWrap" class="progress-wrap"><div id="progressBar" class="progress-bar"></div></div>
+      <div id="scanBody"></div>
+      <div class="modal-actions">
+        <button id="cancelScanBtn" class="secondary">Vazgeç</button>
+        <button id="saveScanBtn" class="primary" disabled>Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
