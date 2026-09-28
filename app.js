@@ -52,9 +52,16 @@ function findCode(t){for(const l of lines(t)){if(/malzeme/i.test(l)&&/kod/i.test
 function parseQtyValue(v){if(v==null)return null;let s=String(v).trim().replace(/\s/g,'');if(!s)return null;const neg=s.startsWith('-');s=s.replace(/^[+\-]/,'');if(s.includes(',')){s=s.replace(/\./g,'').replace(',','.')}else{const parts=s.split('.');if(parts.length>2)s=parts.join('');}const x=Number((neg?'-':'')+s);return Number.isFinite(x)?x:null}
 function quantityAfterLabel(t){
   const src=String(t||'').replace(/\s+/g,' ');
-  const re=/toplam\s*m[iıİI1l]ktar\s*[:=]?\s*([+\-]?\s*\d+(?:[.,]\d+)?)/i;
+  const re=/toplam\s*m[iıİI1l]k?t[a-zçğıöşü1l]*\s*[:=]?\s*([+\-]?\s*\d+(?:[.,]\d+)?)/i;
   const m=src.match(re);
-  return m?parseQtyValue(m[1]):null
+  if(m)return parseQtyValue(m[1]);
+  for(const l of lines(t)){
+    const s=l.toLowerCase().replace(/ı/g,'i').replace(/[1l]/g,'i');
+    if(!/toplam/.test(s)||!/mik/.test(s)||/tutar/.test(s))continue;
+    const a=l.match(/[+\-]?\s*\d+(?:[.,]\d+)?/g);
+    if(a&&a.length)return parseQtyValue(a[a.length-1]);
+  }
+  return null
 }
 function findTotal(t){
   const q=quantityAfterLabel(t);
@@ -71,7 +78,9 @@ function parseMove(t,m){const c=findCode(t),p=st.products[c],q=findTotal(t);retu
 function productCodeFromLine(l){
   const strict=l.match(/(?:ürün|urun)\s*kodu?\s*[:=]?\s*([0-9OIL]{7,8})/i);
   if(strict)return code(strict[1]);
-  if(/(?:ürün|urun)/i.test(l)&&/kod/i.test(l)){const m=l.match(/[0-9OIL]{7,8}/);return m?code(m[0]):''}
+  if(/(?:ürün|urun|malzeme)/i.test(l)&&/kod/i.test(l)){const m=l.match(/[0-9OIL]{7,8}/);if(m)return code(m[0])}
+  const all=l.match(/[0-9OIL]{7,8}/g)||[];
+  for(const x of all){const c=code(x);if(c.length>=7)return c}
   return ''
 }
 function productNameFromBlock(block,c){
@@ -154,7 +163,14 @@ function confirmUI(){
   E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="confirm-grid"><div class="field"><label>Ürün Kodu</label><input id="lc" value="'+esc(parsed.code||'')+'" inputmode="numeric" placeholder="7-8 haneli ürün kodu"></div><div class="field"><label>Ürün Adı</label><input id="ln" value="'+esc(parsed.name||'')+'" placeholder="Ürün adı"></div><div class="field"><label>Birim</label><select id="lu"><option value="ADET">ADET</option><option value="KG">KG</option></select></div><div class="status-box">Bu ürün önceki sayımda yoksa <b>Önceki = 0</b> ile kaydolur. Daha sonra 101 / 251 / 301 / Fire verilerini girdiğinde doğrudan aynı ürüne işlenir.</div></div><details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details>';
   $('#lu').value=parsed.unit||'ADET';const valid=()=>{E.save.disabled=code($('#lc').value).length<7||!$('#ln').value.trim()};$('#lc').oninput=valid;$('#ln').oninput=valid;valid();return
  }
- if(parsed.kind==='prev'){E.body.innerHTML='<img class="preview" src="'+preview+'"><div id="prevRows" class="confirm-grid">'+parsed.rows.map((r,i)=>'<div class="confirm-row" data-i="'+i+'"><input class="code-input" value="'+r.code+'" inputmode="numeric"><input class="name-input" value="'+esc(r.name)+' ('+esc(r.unit||'ADET')+')"><input class="qty-input" type="number" step="0.001" value="'+r.qty+'" inputmode="decimal"><button class="remove-row">✕</button></div>').join('')+'</div><button id="addPrevRow" class="secondary" style="margin-top:8px">+ Elle satır ekle</button><details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details>';bindPrev();$('#addPrevRow').onclick=()=>{parsed.rows.push({code:'',name:'',qty:0});confirmUI()};E.save.disabled=!parsed.rows.length;return}
+ if(parsed.kind==='prev'){
+  const none=!parsed.rows.length;
+  E.body.innerHTML='<img class="preview" src="'+preview+'">'+(none?'<div class="status-box" style="color:#8a4f19"><b>OCR tamamlandı ama ürün satırı bulunamadı.</b><br>Fotoğrafı yeniden çekebilir veya satırı elle ekleyebilirsin.</div><button id="retryPrev" class="primary" style="margin-bottom:8px">Fotoğrafı Yeniden Çek</button>':'')+'<div id="prevRows" class="confirm-grid">'+parsed.rows.map((r,i)=>'<div class="confirm-row" data-i="'+i+'"><input class="code-input" value="'+r.code+'" inputmode="numeric"><input class="name-input" value="'+esc(r.name)+' ('+esc(r.unit||'ADET')+')"><input class="qty-input" type="number" step="0.001" value="'+r.qty+'" inputmode="decimal"><button class="remove-row">✕</button></div>').join('')+'</div><button id="addPrevRow" class="secondary" style="margin-top:8px">+ Elle satır ekle</button><details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details>';
+  bindPrev();
+  if($('#retryPrev'))$('#retryPrev').onclick=()=>{closeM();mode='prev';E.cam.value='';E.cam.click()};
+  $('#addPrevRow').onclick=()=>{parsed.rows.push({code:'',name:'',qty:0,unit:'ADET'});confirmUI()};
+  E.save.disabled=!parsed.rows.length;return
+}
  E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="confirm-grid"><div class="field"><label>Ürün Kodu</label><input id="mc" value="'+esc(parsed.code)+'" inputmode="numeric"></div><div class="field"><label>Ürün Adı</label><input id="mn" value="'+esc(parsed.name)+'"></div><div class="field"><label>Toplam Miktar</label><input id="mq" type="number" inputmode="numeric" value="'+(parsed.qty==null?'':Math.abs(parsed.qty))+'"></div>'+(parsed.mode==='301'?'<div class="field"><label>301 yönü</label><div class="direction"><button id="dp" class="'+(parsed.dir>0?'active':'')+'">+ Bize gelen</button><button id="dm" class="'+(parsed.dir<0?'active':'')+'">− Bizden giden</button></div></div>':'')+'<details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details></div>';const val=()=>E.save.disabled=!(code($('#mc').value).length>=7&&$('#mq').value!=='');$('#mc').oninput=val;$('#mq').oninput=val;if(parsed.mode==='301'){$('#dp').onclick=()=>{parsed.dir=1;confirmUI()};$('#dm').onclick=()=>{parsed.dir=-1;confirmUI()}}val()
 }
 function bindPrev(){$$('#prevRows .confirm-row').forEach(row=>{const i=Number(row.dataset.i),r=parsed.rows[i];row.querySelector('.code-input').oninput=e=>r.code=code(e.target.value);row.querySelector('.name-input').oninput=e=>{const v=e.target.value;r.name=v.replace(/\s*\((ADET|KG)\)\s*$/i,'').trim()};row.querySelector('.qty-input').oninput=e=>r.qty=Number(e.target.value);row.querySelector('.remove-row').onclick=()=>{parsed.rows.splice(i,1);confirmUI()}})}
