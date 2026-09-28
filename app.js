@@ -7,7 +7,7 @@ const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(
 let st=load(),mode='',parsed=null,raw='',worker=null,preview='';
 const E={cam:$('#cameraInput'),modal:$('#scanModal'),title:$('#modalTitle'),sub:$('#modalSub'),body:$('#scanBody'),save:$('#saveScanBtn'),cancel:$('#cancelScanBtn'),close:$('#closeModalBtn'),bar:$('#progressBar'),list:$('#stockList'),empty:$('#emptyState'),search:$('#searchInput'),pc:$('#productCount'),dc:$('#diffCount'),hist:$('#historyList'),date:$('#countDateInput'),net:$('#netBadge'),off:$('#offlineStatus'),toast:$('#toast'),user:$('#userSelect'),userNames:[$('#userName1'),$('#userName2'),$('#userName3')],saveUsers:$('#saveUserNamesBtn'),fireList:$('#fireList'),fireEmpty:$('#fireEmpty'),fireKg:$('#fireKgTotal'),fireAdet:$('#fireAdetTotal')};
 function fresh(){return{version:5,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
-function load(){try{const d=JSON.parse(localStorage.getItem(KEY))||fresh();d.settings=d.settings||{};if(!Array.isArray(d.settings.users)||d.settings.users.length!==3)d.settings.users=['Murat','Yardımcı 1','Yardımcı 2'];d.settings.activeUser=Math.max(0,Math.min(2,Number(d.settings.activeUser)||0));if(!Array.isArray(d.history))d.history=[];if(!Array.isArray(d.snapshots))d.snapshots=[];d.products=d.products||{};Object.values(d.products).forEach(p=>{if(p.waste==null)p.waste=0;if(p.otherNet==null)p.otherNet=0;if(!p.unit)p.unit='ADET'});if(!Array.isArray(d.fireLog)){d.fireLog=d.history.filter(h=>h.type==='fire').map(h=>{const p=d.products[h.code]||{};return{at:h.at,user:h.user||'',code:h.code,name:h.name||p.name||'',unit:h.unit||p.unit||'ADET',qty:Math.abs(n(h.newv)-n(h.oldv)),cumulative:n(h.newv)}})}d.version=5;return d}catch(e){return fresh()}}
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY))||fresh();d.settings=d.settings||{};if(!Array.isArray(d.settings.users)||d.settings.users.length!==3)d.settings.users=['Murat','Yardımcı 1','Yardımcı 2'];d.settings.activeUser=Math.max(0,Math.min(2,Number(d.settings.activeUser)||0));if(!Array.isArray(d.history))d.history=[];if(!Array.isArray(d.snapshots))d.snapshots=[];d.products=d.products||{};Object.values(d.products).forEach(p=>{if(p.waste==null)p.waste=0;if(p.otherNet==null)p.otherNet=0;if(p.previousAmount==null)p.previousAmount='';if(!p.unit)p.unit='ADET'});if(!Array.isArray(d.fireLog)){d.fireLog=d.history.filter(h=>h.type==='fire').map(h=>{const p=d.products[h.code]||{};return{at:h.at,user:h.user||'',code:h.code,name:h.name||p.name||'',unit:h.unit||p.unit||'ADET',qty:Math.abs(n(h.newv)-n(h.oldv)),cumulative:n(h.newv)}})}d.version=5;return d}catch(e){return fresh()}}
 function save(){localStorage.setItem(KEY,JSON.stringify(st));render()}
 function n(v){v=Number(v);return Number.isFinite(v)?v:0}
 function fmtQty(v){return new Intl.NumberFormat('tr-TR',{maximumFractionDigits:3}).format(n(v))}
@@ -16,7 +16,7 @@ function code(v){return String(v||'').toUpperCase().replace(/O/g,'0').replace(/[
 function exp(p){return n(p.previous)+n(p.in101)-n(p.sales251)+n(p.transfer301)-n(p.waste)+n(p.otherNet)}
 function dif(p){return p.actual===''||p.actual==null?null:n(p.actual)-exp(p)}
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function ensure(c,name,unit,overwriteName){c=code(c);if(!c)return null;const isNew=!st.products[c];if(isNew)st.products[c]={code:c,name:name||('Ürün '+c),unit:normUnit(unit),previous:0,in101:0,sales251:0,transfer301:0,waste:0,otherNet:0,actual:'',nameSource:name?'ocr':'generic'};const p=st.products[c];if(p.waste==null)p.waste=0;if(!p.unit)p.unit='ADET';const generic=!p.name||p.name==='Ürün '+c;if(name&&(isNew||generic||overwriteName||p.nameSource!=='confirmed')){p.name=name;p.nameSource=overwriteName?'confirmed':'ocr'}if(unit&&(isNew||overwriteName||!p.unit))p.unit=normUnit(unit);return p}
+function ensure(c,name,unit,overwriteName){c=code(c);if(!c)return null;const isNew=!st.products[c];if(isNew)st.products[c]={code:c,name:name||('Ürün '+c),unit:normUnit(unit),previous:0,previousAmount:'',in101:0,sales251:0,transfer301:0,waste:0,otherNet:0,actual:'',nameSource:name?'ocr':'generic'};const p=st.products[c];if(p.waste==null)p.waste=0;if(!p.unit)p.unit='ADET';const generic=!p.name||p.name==='Ürün '+c;if(name&&(isNew||generic||overwriteName||p.nameSource!=='confirmed')){p.name=name;p.nameSource=overwriteName?'confirmed':'ocr'}if(unit&&(isNew||overwriteName||!p.unit))p.unit=normUnit(unit);return p}
 function toast(t){E.toast.textContent=t;E.toast.classList.add('show');setTimeout(()=>E.toast.classList.remove('show'),2200)}
 function signed(v){v=n(v);return v>0?'+'+v:String(v)}
 function render(){
@@ -58,6 +58,19 @@ function quantityAfterLabel(t){
   for(const l of lines(t)){
     const s=l.toLowerCase().replace(/ı/g,'i').replace(/[1l]/g,'i');
     if(!/toplam/.test(s)||!/mik/.test(s)||/tutar/.test(s))continue;
+    const a=l.match(/[+\-]?\s*\d+(?:[.,]\d+)?/g);
+    if(a&&a.length)return parseQtyValue(a[a.length-1]);
+  }
+  return null
+}
+function amountAfterLabel(t){
+  const src=String(t||'').replace(/\s+/g,' ');
+  const re=/toplam\s*tutar\s*[:=]?\s*([+\-]?\s*\d+(?:[.,]\d+)?)/i;
+  const m=src.match(re);
+  if(m)return parseQtyValue(m[1]);
+  for(const l of lines(t)){
+    const s=normOcr(l);
+    if(!/toplam/.test(s)||!/tutar/.test(s))continue;
     const a=l.match(/[+\-]?\s*\d+(?:[.,]\d+)?/g);
     if(a&&a.length)return parseQtyValue(a[a.length-1]);
   }
@@ -132,6 +145,13 @@ function qtyFromStructuredLine(s){
  if(!nums||!nums.length)return null;
  return parseQtyValue(nums[0])
 }
+function amountFromStructuredLine(s){
+ const raw=String(s||''),nrm=normOcr(raw);
+ if(!/toplam/.test(nrm)||!/tutar/.test(nrm))return null;
+ const nums=raw.match(/[+\-]?\s*\d+(?:[.,]\d+)?/g);
+ if(!nums||!nums.length)return null;
+ return parseQtyValue(nums[nums.length-1])
+}
 function nameFromStructuredBand(lines,c){
  for(const l of lines){
    const n=normOcr(l.text);
@@ -155,15 +175,14 @@ function parsePrevStructured(text,blocks){
    const y0=k===0?Math.max(0,cur.y-12):Math.floor((starts[k-1].y+cur.y)/2);
    const y1=next?Math.floor((cur.y+next.y)/2):cur.y+Math.max(60,(k?cur.y-starts[k-1].y:80));
    const band=L.filter(x=>{const cy=(x.bbox.y0+x.bbox.y1)/2;return cy>=y0&&cy<y1});
-   let q=null;
-   for(const l of band){q=qtyFromStructuredLine(l.text);if(q!=null)break}
-   if(q==null){
-     const joined=band.map(x=>x.text).join(' ');
-     q=quantityAfterLabel(joined)
-   }
+   let q=null,amount=null;
+   for(const l of band){if(q==null)q=qtyFromStructuredLine(l.text);if(amount==null)amount=amountFromStructuredLine(l.text)}
+   const joined=band.map(x=>x.text).join(' ');
+   if(q==null)q=quantityAfterLabel(joined);
+   if(amount==null)amount=amountAfterLabel(joined);
    if(q==null)continue;
    const name=nameFromStructuredBand(band,cur.c)||('Ürün '+cur.c);
-   rows.push({code:cur.c,name,qty:q,unit:unitFromBlock(band.map(x=>x.text).join(' '))})
+   rows.push({code:cur.c,name,qty:q,amount:amount==null?'':amount,unit:unitFromBlock(joined)})
  }
  const M=new Map();rows.forEach(r=>M.set(r.code,r));
  const parsed={kind:'prev',rows:Array.from(M.values())};
@@ -176,10 +195,10 @@ function parsePrev(t){
   for(let k=0;k<starts.length;k++){
     const cur=starts[k],end=k+1<starts.length?starts[k+1].i:Math.min(L.length,cur.i+5);
     const block=L.slice(cur.i,end).join(' ');
-    const q=quantityAfterLabel(block);
+    const q=quantityAfterLabel(block),amount=amountAfterLabel(block);
     if(q==null)continue;
     const name=productNameFromBlock(block,cur.c)||('Ürün '+cur.c);
-    rows.push({code:cur.c,name,qty:q,unit:unitFromBlock(block)})
+    rows.push({code:cur.c,name,qty:q,amount:amount==null?'':amount,unit:unitFromBlock(block)})
   }
   const M=new Map();rows.forEach(r=>M.set(r.code,r));
   return{kind:'prev',rows:Array.from(M.values())}
@@ -221,15 +240,15 @@ function confirmUI(){
  }
  if(parsed.kind==='prev'){
   const none=!parsed.rows.length;
-  E.body.innerHTML='<img class="preview" src="'+preview+'">'+(none?'<div class="status-box" style="color:#8a4f19"><b>OCR tamamlandı ama ürün satırı bulunamadı.</b><br>Fotoğrafı yeniden çekebilir veya satırı elle ekleyebilirsin.</div><button id="retryPrev" class="primary" style="margin-bottom:8px">Fotoğrafı Yeniden Çek</button>':'')+'<div id="prevRows" class="confirm-grid">'+parsed.rows.map((r,i)=>'<div class="confirm-row" data-i="'+i+'"><input class="code-input" value="'+r.code+'" inputmode="numeric"><input class="name-input" value="'+esc(r.name)+' ('+esc(r.unit||'ADET')+')"><input class="qty-input" type="number" step="0.001" value="'+r.qty+'" inputmode="decimal"><button class="remove-row">✕</button></div>').join('')+'</div><button id="addPrevRow" class="secondary" style="margin-top:8px">+ Elle satır ekle</button><details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details>';
+  E.body.innerHTML='<img class="preview" src="'+preview+'">'+(none?'<div class="status-box" style="color:#8a4f19"><b>OCR tamamlandı ama ürün satırı bulunamadı.</b><br>Fotoğrafı yeniden çekebilir veya satırı elle ekleyebilirsin.</div><button id="retryPrev" class="primary" style="margin-bottom:8px">Fotoğrafı Yeniden Çek</button>':'')+'<div class="prev-grid-head"><span>Kod</span><span>Ürün</span><span>Miktar</span><span>Tutar TL</span><span></span></div><div id="prevRows" class="confirm-grid">'+parsed.rows.map((r,i)=>'<div class="confirm-row" data-i="'+i+'"><input class="code-input" value="'+r.code+'" inputmode="numeric"><input class="name-input" value="'+esc(r.name)+' ('+esc(r.unit||'ADET')+')"><input class="qty-input" type="number" step="0.001" value="'+r.qty+'" inputmode="decimal"><input class="amount-input" type="number" step="0.01" value="'+(r.amount===''?'':r.amount)+'" inputmode="decimal" placeholder="TL"><button class="remove-row">✕</button></div>').join('')+'</div><button id="addPrevRow" class="secondary" style="margin-top:8px">+ Elle satır ekle</button><details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details>';
   bindPrev();
   if($('#retryPrev'))$('#retryPrev').onclick=()=>{closeM();mode='prev';E.cam.value='';E.cam.click()};
-  $('#addPrevRow').onclick=()=>{parsed.rows.push({code:'',name:'',qty:0,unit:'ADET'});confirmUI()};
+  $('#addPrevRow').onclick=()=>{parsed.rows.push({code:'',name:'',qty:0,amount:'',unit:'ADET'});confirmUI()};
   E.save.disabled=!parsed.rows.length;return
 }
  E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="confirm-grid"><div class="field"><label>Ürün Kodu</label><input id="mc" value="'+esc(parsed.code)+'" inputmode="numeric"></div><div class="field"><label>Ürün Adı</label><input id="mn" value="'+esc(parsed.name)+'"></div><div class="field"><label>Toplam Miktar</label><input id="mq" type="number" inputmode="numeric" value="'+(parsed.qty==null?'':Math.abs(parsed.qty))+'"></div>'+(parsed.mode==='301'?'<div class="field"><label>301 yönü</label><div class="direction"><button id="dp" class="'+(parsed.dir>0?'active':'')+'">+ Bize gelen</button><button id="dm" class="'+(parsed.dir<0?'active':'')+'">− Bizden giden</button></div></div>':'')+'<details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details></div>';const val=()=>E.save.disabled=!(code($('#mc').value).length>=7&&$('#mq').value!=='');$('#mc').oninput=val;$('#mq').oninput=val;if(parsed.mode==='301'){$('#dp').onclick=()=>{parsed.dir=1;confirmUI()};$('#dm').onclick=()=>{parsed.dir=-1;confirmUI()}}val()
 }
-function bindPrev(){$$('#prevRows .confirm-row').forEach(row=>{const i=Number(row.dataset.i),r=parsed.rows[i];row.querySelector('.code-input').oninput=e=>r.code=code(e.target.value);row.querySelector('.name-input').oninput=e=>{const v=e.target.value;r.name=v.replace(/\s*\((ADET|KG)\)\s*$/i,'').trim()};row.querySelector('.qty-input').oninput=e=>r.qty=Number(e.target.value);row.querySelector('.remove-row').onclick=()=>{parsed.rows.splice(i,1);confirmUI()}})}
+function bindPrev(){$$('#prevRows .confirm-row').forEach(row=>{const i=Number(row.dataset.i),r=parsed.rows[i];row.querySelector('.code-input').oninput=e=>r.code=code(e.target.value);row.querySelector('.name-input').oninput=e=>{const v=e.target.value;r.name=v.replace(/\s*\((ADET|KG)\)\s*$/i,'').trim()};row.querySelector('.qty-input').oninput=e=>r.qty=Number(e.target.value);row.querySelector('.amount-input').oninput=e=>r.amount=e.target.value===''?'':Number(e.target.value);row.querySelector('.remove-row').onclick=()=>{parsed.rows.splice(i,1);confirmUI()}})}
 function hist(type,p,field,oldv,newv,note){const user=st.settings.users[st.settings.activeUser]||'Kullanıcı';st.history.push({at:new Date().toISOString(),user,type,code:p.code,name:p.name,unit:p.unit||'ADET',field,oldv,newv,note});if(st.history.length>1000)st.history=st.history.slice(-1000)}
 function openProductEdit(c){
  const p=st.products[c];if(!p)return;
@@ -252,17 +271,17 @@ function saveScan(){
  if(parsed&&parsed.kind==='editProduct'){const p=st.products[parsed.code],name=$('#editProductName').value.trim(),unit=normUnit($('#editProductUnit').value);if(!p||!name)return;const oldName=p.name,oldUnit=p.unit||'ADET';p.name=name;p.unit=unit;p.nameSource='confirmed';hist('label',p,'product',oldName+' / '+oldUnit,name+' / '+unit,'Ürün adı/birimi elle doğrulandı');save();closeM();toast(p.code+' ürün bilgisi düzeltildi');return}
  if(parsed&&parsed.kind==='label'){const lc=code($('#lc').value),name=$('#ln').value.trim(),unit=normUnit($('#lu').value);if(lc.length<7||!name)return;const existed=!!st.products[lc],p=ensure(lc,name,unit,true);p.nameSource='confirmed';hist('label',p,'product',existed?'mevcut':'yeni','kayıt',existed?'Etiket bilgisi doğrulandı':'Yeni ürün etiketten kaydedildi · Önceki 0');save();closeM();toast(lc+(existed?' adı doğrulandı':' yeni ürün kaydedildi'));return}
  if(parsed&&parsed.kind==='fire'){const fc=code($('#fireCode').value),p=st.products[fc],q0=parseQtyValue($('#fireQty').value),q=q0==null?NaN:Math.abs(q0);if(!p||!Number.isFinite(q)||q<=0)return;p.unit=normUnit($('#fireUnit').value);const old=n(p.waste);p.waste=old+q;const at=new Date().toISOString(),user=st.settings.users[st.settings.activeUser]||'Kullanıcı';st.fireLog.push({at,user,code:p.code,name:p.name,unit:p.unit,qty:q,cumulative:p.waste});hist('fire',p,'waste',old,p.waste,'Fire +'+fmtQty(q)+' '+p.unit+' · stoktan -'+fmtQty(q)+' '+p.unit);save();closeM();toast(p.code+' fire -'+fmtQty(q)+' '+p.unit+' · olması gereken '+fmtQty(exp(p))+' '+p.unit);return}
- if(parsed.kind==='prev'){let k=0;parsed.rows.forEach(r=>{const c=code(r.code),q=Number(r.qty);if(c.length<7||!Number.isFinite(q))return;const p=ensure(c,r.name,r.unit,false),o=p.previous;p.previous=q;hist('prev',p,'previous',o,q,'Önceki sayım '+q);k++});save();closeM();toast(k+' ürün kaydedildi');return}
+ if(parsed.kind==='prev'){let k=0;parsed.rows.forEach(r=>{const c=code(r.code),q=Number(r.qty);if(c.length<7||!Number.isFinite(q))return;const p=ensure(c,r.name,r.unit,false),o=p.previous;p.previous=q;p.previousAmount=r.amount===''?'':n(r.amount);hist('prev',p,'previous',o,q,'Önceki sayım '+q+(p.previousAmount!==''?' · Tutar '+p.previousAmount+' TL':''));k++});save();closeM();toast(k+' ürün kaydedildi');return}
  const c=code($('#mc').value),name=$('#mn').value.trim(),q=Math.abs(Number($('#mq').value)),p=ensure(c,name,null,false);if(!p||!Number.isFinite(q))return;let f='',v=q;if(parsed.mode==='101')f='in101';if(parsed.mode==='251')f='sales251';if(parsed.mode==='301'){f='transfer301';v=q*(parsed.dir||1)}const o=p[f];p[f]=v;hist(parsed.mode,p,f,o,v,LABEL[parsed.mode]+' '+signed(v));save();closeM();toast(c+' güncellendi · olması gereken '+exp(p))
 }
 function currentSnapshot(){
  const at=new Date().toISOString(),user=st.settings.users[st.settings.activeUser]||'Kullanıcı';
- const rows=Object.values(st.products).sort((a,b)=>a.code.localeCompare(b.code)).map(p=>({code:p.code,name:p.name,unit:p.unit||'ADET',previous:n(p.previous),in101:n(p.in101),sales251:n(p.sales251),transfer301:n(p.transfer301),waste:n(p.waste),otherNet:n(p.otherNet),expected:exp(p),actual:p.actual===''?'':n(p.actual),diff:dif(p)==null?'':dif(p)}));
+ const rows=Object.values(st.products).sort((a,b)=>a.code.localeCompare(b.code)).map(p=>({code:p.code,name:p.name,unit:p.unit||'ADET',previous:n(p.previous),previousAmount:p.previousAmount===''?'':n(p.previousAmount),in101:n(p.in101),sales251:n(p.sales251),transfer301:n(p.transfer301),waste:n(p.waste),otherNet:n(p.otherNet),expected:exp(p),actual:p.actual===''?'':n(p.actual),diff:dif(p)==null?'':dif(p)}));
  return{at,user,rows}
 }
 function cumulativeCsv(){
- const rows=[['Yedek Tarihi','Kullanıcı','Ürün Kodu','Ürün Adı','Birim','Önceki Sayım','101 Gelen','251 Satan','301 Transfer','Fire','Diğer Net','Olması Gereken','Gerçek Sayım','Fark']];
- st.snapshots.forEach(s=>(s.rows||[]).forEach(p=>rows.push([s.at,s.user||'',p.code,p.name,p.unit||'ADET',p.previous,p.in101,p.sales251,p.transfer301,p.waste,p.otherNet,p.expected,p.actual,p.diff])));
+ const rows=[['Yedek Tarihi','Kullanıcı','Ürün Kodu','Ürün Adı','Birim','Önceki Sayım','Önceki Tutar TL','101 Gelen','251 Satan','301 Transfer','Fire','Diğer Net','Olması Gereken','Gerçek Sayım','Fark']];
+ st.snapshots.forEach(s=>(s.rows||[]).forEach(p=>rows.push([s.at,s.user||'',p.code,p.name,p.unit||'ADET',p.previous,p.previousAmount,p.in101,p.sales251,p.transfer301,p.waste,p.otherNet,p.expected,p.actual,p.diff])));
  return '\ufeff'+rows.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';')).join('\r\n')
 }
 function appendExcelBackup(){
