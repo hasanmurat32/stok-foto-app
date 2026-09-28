@@ -9,7 +9,8 @@ const E={cam:$('#cameraInput'),modal:$('#scanModal'),title:$('#modalTitle'),sub:
 function fresh(){return{version:5,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY))||fresh();d.settings=d.settings||{};if(!Array.isArray(d.settings.users)||d.settings.users.length!==3)d.settings.users=['Murat','Yardımcı 1','Yardımcı 2'];d.settings.activeUser=Math.max(0,Math.min(2,Number(d.settings.activeUser)||0));if(!Array.isArray(d.history))d.history=[];if(!Array.isArray(d.snapshots))d.snapshots=[];d.products=d.products||{};Object.values(d.products).forEach(p=>{if(p.waste==null)p.waste=0;if(p.otherNet==null)p.otherNet=0;if(p.previousAmount==null)p.previousAmount='';if(p.unitPrice==null||!Number.isFinite(Number(p.unitPrice))||Number(p.unitPrice)<0)p.unitPrice=(n(p.previous)>0&&n(p.previousAmount)>0)?n(p.previousAmount)/n(p.previous):0;if(!p.unit)p.unit='ADET'});if(!Array.isArray(d.fireLog)){d.fireLog=d.history.filter(h=>h.type==='fire').map(h=>{const p=d.products[h.code]||{};return{at:h.at,user:h.user||'',code:h.code,name:h.name||p.name||'',unit:h.unit||p.unit||'ADET',qty:Math.abs(n(h.newv)-n(h.oldv)),cumulative:n(h.newv)}})}d.fireLog.forEach(x=>{const p=d.products[x.code]||{},up=Number(x.unitPrice)>0?Number(x.unitPrice):calcUnitPrice(p);if(x.unitPrice==null)x.unitPrice=up;if(x.amount==null)x.amount=n(x.qty)*up});d.version=6;return d}catch(e){return fresh()}}
 function save(){localStorage.setItem(KEY,JSON.stringify(st));render()}
-function finishSave(message){closeM();save();if(message)toast(message)}
+function activateTab(name){$('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));$('.tab-panel').forEach(x=>x.classList.toggle('active',x.id==='tab-'+name))}
+function finishSave(message,tab){closeM();save();if(tab)activateTab(tab);if(message)toast(message)}
 function n(v){v=Number(v);return Number.isFinite(v)?v:0}
 function fmtQty(v){return new Intl.NumberFormat('tr-TR',{maximumFractionDigits:3}).format(n(v))}
 function fmtTL(v){return new Intl.NumberFormat('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n(v))+' TL'}
@@ -40,7 +41,8 @@ function render(){
   const kg=fp.filter(p=>(p.unit||'ADET')==='KG').reduce((s,p)=>s+n(p.waste),0);
   const adet=fp.filter(p=>(p.unit||'ADET')!=='KG').reduce((s,p)=>s+n(p.waste),0);
   const values={};(st.fireLog||[]).forEach(x=>values[x.code]=(values[x.code]||0)+n(x.amount));
-  const totalValue=(st.fireLog||[]).reduce((s,x)=>s+n(x.amount),0);
+  fp.forEach(p=>{if(values[p.code]==null||values[p.code]===0)values[p.code]=n(p.waste)*calcUnitPrice(p)});
+  const totalValue=fp.reduce((s,p)=>s+n(values[p.code]),0);
   E.fireKg.textContent=fmtQty(kg)+' KG';E.fireAdet.textContent=fmtQty(adet)+' ADET';if(E.fireValue)E.fireValue.textContent=fmtTL(totalValue);
   E.fireEmpty.style.display=fp.length?'none':'block';
   E.fireList.innerHTML=fp.map(p=>'<div class="card fire-item"><div class="fire-item-main"><b>'+esc(p.name)+'</b><small>'+p.code+' · '+(p.unit||'ADET')+' · Birim fiyat '+fmtTL(calcUnitPrice(p))+'</small></div><div class="fire-item-qty">-'+fmtQty(p.waste)+' '+(p.unit||'ADET')+'<br><small>'+fmtTL(values[p.code]||0)+'</small></div></div>').join('');
@@ -315,7 +317,7 @@ function saveScan(){
    const at=new Date().toISOString(),user=st.settings.users[st.settings.activeUser]||'Kullanıcı';
    st.fireLog.push({at,user,code:p.code,name:p.name,unit:p.unit,qty:q,unitPrice:up,amount,cumulative:p.waste});
    hist('fire',p,'waste',old,p.waste,'Fire +'+fmtQty(q)+' '+p.unit+' · '+fmtTL(amount)+(existed?'':' · yeni ürün'));
-   finishSave(p.code+' fire kaydedildi · '+fmtTL(amount));return
+   finishSave(p.code+' fire kaydedildi · '+fmtTL(amount),'fire');return
  }
  if(parsed.kind==='prev'){
    let k=0;
@@ -357,7 +359,7 @@ function exportFire(){const stamp=new Date().toISOString().replace(/[:.]/g,'-').
 function dl(data,name,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:type||'application/octet-stream'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function offline(){const b=$('#offlinePrepBtn');b.disabled=true;openM('Çevrimdışı OCR hazırlanıyor','İlk kez internet gerekir.');E.save.style.display='none';E.cancel.textContent='Kapat';E.body.innerHTML='<div class="status-box">OCR motoru ve Türkçe model indiriliyor…</div>';try{const w=await getWorker(),c=document.createElement('canvas');c.width=300;c.height=80;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,300,80);x.fillStyle='#000';x.font='30px Arial';x.fillText('0200367 160',10,50);await w.recognize(c);st.settings.offlineReady=true;save();E.body.innerHTML='<div class="status-box" style="color:#116236"><b>Hazır.</b> Çevrimdışı OCR kurulumu tamamlandı. Bu pencereyi kapatabilirsin.</div>'}catch(e){E.body.innerHTML='<div class="status-box" style="color:#992c2c">Hazırlama başarısız: '+esc(e.message||e)+'</div>'}finally{b.disabled=false}}
 $$('.scan-btn[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;E.cam.value='';E.cam.click()});$('#wasteEntryBtn').onclick=()=>openWaste('');E.cam.onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)scan(f)};E.save.onclick=saveScan;E.cancel.onclick=closeM;E.close.onclick=closeM;E.search.oninput=render;E.date.onchange=()=>{st.settings.countDate=E.date.value;save()};if(E.user)E.user.onchange=()=>{st.settings.activeUser=Number(E.user.value)||0;save()};E.userNames.forEach((el,i)=>{if(el)el.onchange=()=>{const v=el.value.trim()||('Kullanıcı '+(i+1));st.settings.users[i]=v;save()}});if(E.saveUsers)E.saveUsers.onclick=()=>{E.userNames.forEach((el,i)=>{const v=(el&&el.value.trim())||('Kullanıcı '+(i+1));st.settings.users[i]=v});save();toast('Kullanıcı isimleri kaydedildi')};
-$$('.tab').forEach(b=>b.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.tab-panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#tab-'+b.dataset.tab).classList.add('active')});
+$('.tab').forEach(b=>b.onclick=()=>activateTab(b.dataset.tab));
 $('#offlinePrepBtn').onclick=offline;$('#loadDemoBtn').onclick=()=>{const p=ensure('0200367','YOĞURT %4 YAĞLI 3000 G DOST','ADET',true);p.nameSource='confirmed';Object.assign(p,{unit:'ADET',previous:16,previousAmount:0,unitPrice:0,in101:160,sales251:149,transfer301:3,waste:0,otherNet:0,actual:''});save();toast('Yoğurt örneği: 30 adet')};
 $('#clearAllBtn').onclick=()=>{if(confirm('Tüm stok verisi silinsin mi?')){st=fresh();save()}};$('#clearHistoryBtn').onclick=()=>{if(confirm('Geçmiş silinsin mi?')){st.history=[];save()}};
 $('#exportXlsxBtn').onclick=appendExcelBackup;$('#exportFireBtn').onclick=exportFire;
