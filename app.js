@@ -6,7 +6,7 @@ const LABEL={prev:'Önceki Sayım','101':'101 Gelen','251':'251 Satan','301':'30
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 let st=load(),mode='',parsed=null,raw='',worker=null,preview='';
 const E={cam:$('#cameraInput'),modal:$('#scanModal'),title:$('#modalTitle'),sub:$('#modalSub'),body:$('#scanBody'),save:$('#saveScanBtn'),cancel:$('#cancelScanBtn'),close:$('#closeModalBtn'),bar:$('#progressBar'),list:$('#stockList'),empty:$('#emptyState'),search:$('#searchInput'),pc:$('#productCount'),dc:$('#diffCount'),hist:$('#historyList'),date:$('#countDateInput'),net:$('#netBadge'),off:$('#offlineStatus'),toast:$('#toast'),user:$('#userSelect'),userNames:[$('#userName1'),$('#userName2'),$('#userName3')],saveUsers:$('#saveUserNamesBtn'),fireList:$('#fireList'),fireEmpty:$('#fireEmpty'),fireKg:$('#fireKgTotal'),fireAdet:$('#fireAdetTotal'),fireValue:$('#fireValueTotal')};
-function fresh(){return{version:5,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
+function fresh(){return{version:7,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
 function load(){
  const raw=localStorage.getItem(KEY);
  let d;
@@ -30,7 +30,7 @@ function load(){
      d.fireLog=d.history.filter(h=>h.type==='fire').map(h=>{const p=d.products[h.code]||{};return{at:h.at,user:h.user||'',code:h.code,name:h.name||p.name||'',unit:h.unit||p.unit||'ADET',qty:Math.abs(n(h.newv)-n(h.oldv)),cumulative:n(h.newv)}})
    }
    d.fireLog.forEach(x=>{const p=d.products[x.code]||{},up=Number(x.unitPrice)>0?Number(x.unitPrice):calcUnitPrice(p);if(x.unitPrice==null)x.unitPrice=up;if(x.amount==null)x.amount=n(x.qty)*up});
-   d.version=6;
+   d.version=7;
    return d
  }catch(e){
    // Never make an existing user's stock look empty just because a migration failed.
@@ -61,6 +61,69 @@ function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;',
 function ensure(c,name,unit,overwriteName){c=code(c);if(!c)return null;const isNew=!st.products[c];if(isNew)st.products[c]={code:c,name:name||('Ürün '+c),unit:normUnit(unit),previous:0,previousAmount:'',unitPrice:0,in101:0,sales251:0,transfer301:0,waste:0,otherNet:0,actual:'',nameSource:name?'ocr':'generic'};const p=st.products[c];if(p.waste==null)p.waste=0;if(!p.unit)p.unit='ADET';const generic=!p.name||p.name==='Ürün '+c;if(name&&(isNew||generic||overwriteName||p.nameSource!=='confirmed')){p.name=name;p.nameSource=overwriteName?'confirmed':'ocr'}if(unit&&(isNew||overwriteName||!p.unit))p.unit=normUnit(unit);return p}
 function toast(t){E.toast.textContent=t;E.toast.classList.add('show');setTimeout(()=>E.toast.classList.remove('show'),2200)}
 function signed(v){v=n(v);return v>0?'+'+v:String(v)}
+function txid(){return 'tx-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)}
+function fireValueForProduct(p){
+ let remain=Math.max(0,n(p&&p.waste)),total=0;
+ const logs=(st.fireLog||[]).filter(x=>x.code===p.code).slice().reverse();
+ for(const x of logs){
+   if(remain<=0)break;
+   const q=Math.max(0,n(x.qty));if(q<=0)continue;
+   const take=Math.min(remain,q);
+   const up=n(x.unitPrice)>0?n(x.unitPrice):(q>0&&n(x.amount)>0?n(x.amount)/q:calcUnitPrice(p));
+   total+=take*up;remain-=take
+ }
+ if(remain>0)total+=remain*calcUnitPrice(p);
+ return total
+}
+function removeMatchingFireLog(h,qty){
+ const logs=st.fireLog||[];let i=-1;
+ if(h.id)i=logs.findIndex(x=>x.id===h.id);
+ if(i<0){
+   const ht=Date.parse(h.at||'')||0;let best=Infinity;
+   logs.forEach((x,j)=>{
+     if(x.code!==h.code||Math.abs(n(x.qty)-qty)>.0005)return;
+     const xt=Date.parse(x.at||'')||0,score=Math.abs(xt-ht);
+     if(score<best){best=score;i=j}
+   })
+ }
+ if(i>=0)logs.splice(i,1)
+}
+function undoFireHistory(index){
+ const h=st.history[index];if(!h||h.type!=='fire')return;
+ const qty=Math.abs(n(h.newv)-n(h.oldv)),p=st.products[h.code];
+ if(!confirm((h.code||'Ürün')+' için '+fmtQty(qty)+' '+(h.unit||p&&p.unit||'ADET')+' fire geri alınsın mı?'))return;
+ if(p)p.waste=Math.max(0,n(p.waste)-qty);
+ removeMatchingFireLog(h,qty);
+ st.history.splice(index,1);
+ save();toast('Fire geri alındı; stok, tutar ve fark güncellendi')
+}
+function clearFireForCode(c){
+ const p=st.products[c];if(!p)return;
+ const qty=Math.max(0,n(p.waste)),value=fireValueForProduct(p);
+ if(!confirm(c+' için tüm mevcut fire ('+fmtQty(qty)+' '+(p.unit||'ADET')+' · '+fmtTL(value)+') silinsin mi?'))return;
+ p.waste=0;
+ st.fireLog=(st.fireLog||[]).filter(x=>x.code!==c);
+ st.history=st.history.filter(h=>!(h.type==='fire'&&h.code===c));
+ save();toast(c+' firesi silindi; stok ve fark yeniden hesaplandı')
+}
+function bindSwipe(el,action){
+ let sx=0,sy=0,dx=0,dy=0,active=false,pid=null;
+ el.addEventListener('pointerdown',e=>{
+   if(e.pointerType==='mouse'||e.target.closest('button,input,select,textarea,label'))return;
+   sx=e.clientX;sy=e.clientY;dx=0;dy=0;active=true;pid=e.pointerId;
+   el.classList.add('swiping');try{el.setPointerCapture(pid)}catch(_){}
+ });
+ el.addEventListener('pointermove',e=>{
+   if(!active||e.pointerId!==pid)return;dx=e.clientX-sx;dy=e.clientY-sy;
+   if(Math.abs(dx)>Math.abs(dy))el.style.transform='translateX('+Math.max(-92,Math.min(92,dx))+'px)'
+ });
+ const end=e=>{
+   if(!active||e.pointerId!==pid)return;active=false;el.classList.remove('swiping');el.style.transform='';
+   try{el.releasePointerCapture(pid)}catch(_){}
+   if(Math.abs(dx)>=70&&Math.abs(dx)>Math.abs(dy)*1.25)action()
+ };
+ el.addEventListener('pointerup',end);el.addEventListener('pointercancel',e=>{active=false;el.classList.remove('swiping');el.style.transform=''})
+}
 function render(){
  E.date.value=st.settings.countDate||'';
  if(E.user){E.user.innerHTML=st.settings.users.map((u,i)=>'<option value="'+i+'">'+esc(u)+'</option>').join('');E.user.value=String(st.settings.activeUser)}
@@ -78,14 +141,16 @@ function render(){
   const fp=Object.values(st.products).filter(p=>n(p.waste)>0).sort((a,b)=>a.code.localeCompare(b.code));
   const kg=fp.filter(p=>(p.unit||'ADET')==='KG').reduce((s,p)=>s+n(p.waste),0);
   const adet=fp.filter(p=>(p.unit||'ADET')!=='KG').reduce((s,p)=>s+n(p.waste),0);
-  const values={};(st.fireLog||[]).forEach(x=>values[x.code]=(values[x.code]||0)+n(x.amount));
-  fp.forEach(p=>{if(values[p.code]==null||values[p.code]===0)values[p.code]=n(p.waste)*calcUnitPrice(p)});
+  const values={};fp.forEach(p=>values[p.code]=fireValueForProduct(p));
   const totalValue=fp.reduce((s,p)=>s+n(values[p.code]),0);
   E.fireKg.textContent=fmtQty(kg)+' KG';E.fireAdet.textContent=fmtQty(adet)+' ADET';if(E.fireValue)E.fireValue.textContent=fmtTL(totalValue);
   E.fireEmpty.style.display=fp.length?'none':'block';
-  E.fireList.innerHTML=fp.map(p=>'<div class="card fire-item"><div class="fire-item-main"><b>'+esc(p.name)+'</b><small>'+p.code+' · '+(p.unit||'ADET')+' · Birim fiyat '+fmtTL(calcUnitPrice(p))+'</small></div><div class="fire-item-qty">-'+fmtQty(p.waste)+' '+(p.unit||'ADET')+'<br><small>'+fmtTL(values[p.code]||0)+'</small></div></div>').join('');
+  E.fireList.innerHTML=fp.map(p=>'<div class="card fire-item swipe-row fire-swipe" data-code="'+p.code+'"><div class="fire-item-main"><b>'+esc(p.name)+'</b><small>'+p.code+' · '+(p.unit||'ADET')+' · Birim fiyat '+fmtTL(calcUnitPrice(p))+' · Sağa/sola kaydır: fireyi sil</small></div><div class="fire-item-qty">-'+fmtQty(p.waste)+' '+(p.unit||'ADET')+'<br><small>'+fmtTL(values[p.code]||0)+'</small></div></div>').join('');
  }
- E.hist.innerHTML=st.history.length?st.history.slice().reverse().map(h=>'<div class="card history-item"><div class="history-type">'+esc(LABEL[h.type]||h.type)+'</div><div><b>'+h.code+'</b> '+esc(h.name||'')+'<br><small>'+esc(h.user||'Bilinmeyen')+' · '+esc(h.note||'')+'</small></div></div>').join(''):'<div class="card empty">Henüz işlem geçmişi yok.</div>';
+ const hr=st.history.map((h,i)=>({h,i})).reverse();
+ E.hist.innerHTML=hr.length?hr.map(x=>'<div class="card history-item'+(x.h.type==='fire'?' swipe-row fire-history':'')+'" data-history-index="'+x.i+'"><div class="history-type">'+esc(LABEL[x.h.type]||x.h.type)+'</div><div><b>'+x.h.code+'</b> '+esc(x.h.name||'')+'<br><small>'+esc(x.h.user||'Bilinmeyen')+' · '+esc(x.h.note||'')+(x.h.type==='fire'?' · Sağa/sola kaydır: geri al':'')+'</small></div></div>').join(''):'<div class="card empty">Henüz işlem geçmişi yok.</div>';
+ $('.fire-history').forEach(x=>bindSwipe(x,()=>undoFireHistory(Number(x.dataset.historyIndex))));
+ $('.fire-swipe').forEach(x=>bindSwipe(x,()=>clearFireForCode(x.dataset.code)));
 }
 function openM(t,s){E.title.textContent=t;E.sub.textContent=s||'';E.modal.classList.add('open');E.save.disabled=true;E.bar.style.width='0%'}
 function closeM(){E.modal.classList.remove('open');E.body.innerHTML='';parsed=null;raw='';E.save.style.display='';E.cancel.textContent='Vazgeç';if(preview){URL.revokeObjectURL(preview);preview=''}}
@@ -294,7 +359,7 @@ function confirmUI(){
  E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="confirm-grid"><div class="field"><label>Ürün Kodu</label><input id="mc" value="'+esc(parsed.code)+'" inputmode="numeric"></div><div class="field"><label>Ürün Adı</label><input id="mn" value="'+esc(parsed.name)+'"></div><div class="field"><label>Toplam Miktar</label><input id="mq" type="number" inputmode="numeric" value="'+(parsed.qty==null?'':Math.abs(parsed.qty))+'"></div>'+(parsed.mode==='301'?'<div class="field"><label>301 yönü</label><div class="direction"><button id="dp" class="'+(parsed.dir>0?'active':'')+'">+ Bize gelen</button><button id="dm" class="'+(parsed.dir<0?'active':'')+'">− Bizden giden</button></div></div>':'')+'<details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details></div>';const val=()=>E.save.disabled=!(code($('#mc').value).length>=7&&$('#mq').value!=='');$('#mc').oninput=val;$('#mq').oninput=val;if(parsed.mode==='301'){$('#dp').onclick=()=>{parsed.dir=1;confirmUI()};$('#dm').onclick=()=>{parsed.dir=-1;confirmUI()}}val()
 }
 function bindPrev(){$$('#prevRows .confirm-row').forEach(row=>{const i=Number(row.dataset.i),r=parsed.rows[i];row.querySelector('.code-input').oninput=e=>r.code=code(e.target.value);row.querySelector('.name-input').oninput=e=>{const v=e.target.value;r.name=v.replace(/\s*\((ADET|KG)\)\s*$/i,'').trim()};row.querySelector('.qty-input').oninput=e=>r.qty=Number(e.target.value);row.querySelector('.amount-input').oninput=e=>r.amount=e.target.value===''?'':Number(e.target.value);row.querySelector('.remove-row').onclick=()=>{parsed.rows.splice(i,1);confirmUI()}})}
-function hist(type,p,field,oldv,newv,note){const user=st.settings.users[st.settings.activeUser]||'Kullanıcı';st.history.push({at:new Date().toISOString(),user,type,code:p.code,name:p.name,unit:p.unit||'ADET',field,oldv,newv,note});if(st.history.length>1000)st.history=st.history.slice(-1000)}
+function hist(type,p,field,oldv,newv,note,id){const user=st.settings.users[st.settings.activeUser]||'Kullanıcı',h={id:id||txid(),at:new Date().toISOString(),user,type,code:p.code,name:p.name,unit:p.unit||'ADET',field,oldv,newv,note};st.history.push(h);if(st.history.length>1000)st.history=st.history.slice(-1000);return h}
 function openProductEdit(c){
  const p=st.products[c];if(!p)return;
  openM('Ürün Bilgisini Düzelt','Ürün kodu sabit kalır; adı ve birimi burada doğrulayabilirsin.');
@@ -352,9 +417,9 @@ function saveScan(){
    const existed=!!st.products[fc],p=ensure(fc,name,unit,false);p.unit=unit;p.unitPrice=up;
    if(name&&(!existed||p.nameSource!=='confirmed'))p.name=name;
    const amount=q*up,old=n(p.waste);p.waste=old+q;
-   const at=new Date().toISOString(),user=st.settings.users[st.settings.activeUser]||'Kullanıcı';
-   st.fireLog.push({at,user,code:p.code,name:p.name,unit:p.unit,qty:q,unitPrice:up,amount,cumulative:p.waste});
-   hist('fire',p,'waste',old,p.waste,'Fire +'+fmtQty(q)+' '+p.unit+' · '+fmtTL(amount)+(existed?'':' · yeni ürün'));
+   const at=new Date().toISOString(),user=st.settings.users[st.settings.activeUser]||'Kullanıcı',id=txid();
+   st.fireLog.push({id,at,user,code:p.code,name:p.name,unit:p.unit,qty:q,unitPrice:up,amount,cumulative:p.waste});
+   hist('fire',p,'waste',old,p.waste,'Fire +'+fmtQty(q)+' '+p.unit+' · '+fmtTL(amount)+(existed?'':' · yeni ürün'),id);
    finishSave(p.code+' fire kaydedildi · '+fmtTL(amount),'fire');return
  }
  if(parsed.kind==='prev'){
@@ -399,7 +464,7 @@ async function offline(){const b=$('#offlinePrepBtn');b.disabled=true;openM('Çe
 $$('.scan-btn[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;E.cam.value='';E.cam.click()});$('#wasteEntryBtn').onclick=()=>openWaste('');E.cam.onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)scan(f)};E.save.onclick=saveScan;E.cancel.onclick=closeM;E.close.onclick=closeM;E.search.oninput=render;E.date.onchange=()=>{st.settings.countDate=E.date.value;save()};if(E.user)E.user.onchange=()=>{st.settings.activeUser=Number(E.user.value)||0;save()};E.userNames.forEach((el,i)=>{if(el)el.onchange=()=>{const v=el.value.trim()||('Kullanıcı '+(i+1));st.settings.users[i]=v;save()}});if(E.saveUsers)E.saveUsers.onclick=()=>{E.userNames.forEach((el,i)=>{const v=(el&&el.value.trim())||('Kullanıcı '+(i+1));st.settings.users[i]=v});save();toast('Kullanıcı isimleri kaydedildi')};
 $$('.tab').forEach(b=>b.onclick=()=>activateTab(b.dataset.tab));
 $('#offlinePrepBtn').onclick=offline;$('#loadDemoBtn').onclick=()=>{const p=ensure('0200367','YOĞURT %4 YAĞLI 3000 G DOST','ADET',true);p.nameSource='confirmed';Object.assign(p,{unit:'ADET',previous:16,previousAmount:0,unitPrice:0,in101:160,sales251:149,transfer301:3,waste:0,otherNet:0,actual:''});save();toast('Yoğurt örneği: 30 adet')};
-$('#clearAllBtn').onclick=()=>{if(confirm('Tüm stok verisi silinsin mi?')){st=fresh();save()}};$('#clearHistoryBtn').onclick=()=>{if(confirm('Geçmiş silinsin mi?')){st.history=[];save()}};
+$('#clearAllBtn').onclick=()=>{if(confirm('Tüm stok verisi silinsin mi?')){st=fresh();save()}};$('#clearHistoryBtn').onclick=()=>{if(confirm('Bu işlem yalnız geçmiş listesini temizler; stok, fire ve tutar hesaplarını değiştirmez. Liste temizlensin mi?')){st.history=[];save();toast('Geçmiş listesi temizlendi')}};
 $('#exportXlsxBtn').onclick=appendExcelBackup;$('#exportFireBtn').onclick=exportFire;
 $('#exportBackupBtn').onclick=()=>dl(JSON.stringify(st,null,2),'stok-foto-yedek.json','application/json');$('#importBackupInput').onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!d.products)throw Error('Geçersiz yedek');st=d;save();toast('Yedek geri yüklendi')}catch(x){alert(x.message)}};
 function bootRender(){
