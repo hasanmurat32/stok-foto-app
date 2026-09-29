@@ -35,3 +35,15 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .swipe-row{touch-action:pan-y;transition:transform .18s ease,box-shadow .18s ease;will-change:transform}
 .swipe-row.swiping{transition:none;box-shadow:0 10px 28px rgba(23,54,93,.18)}
 .fire-history,.fire-swipe{position:relative;overflow:hidden}
+
+
+/* Previous-count rescan correction review */
+.prev-review{display:grid;gap:5px;padding:7px;border:1px solid var(--border);border-radius:11px;background:#fbfcfe}
+.prev-row-status{font-size:11px;font-weight:800;padding:5px 8px;border-radius:8px}
+.prev-status-change{background:#fff5cc;color:#7d5d00}
+.prev-status-same{background:#e8f6ee;color:#116236}
+.prev-status-new{background:#eef4fb;color:#244062}
+.prev-status-warn{background:#fdeaea;color:#992c2c}
+.prev-correction-note{margin-bottom:8px}
+@media(max-width:760px){.prev-review .confirm-row{grid-template-columns:90px 1fr 75px 34px}.prev-review .amount-input{grid-column:2/4}}
+@media(max-width:420px){.prev-review .confirm-row{grid-template-columns:1fr 70px 34px}.prev-review .confirm-row .name-input{grid-column:1/-1}.prev-review .amount-input{grid-column:1/3}}
