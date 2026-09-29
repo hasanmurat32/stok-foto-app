@@ -149,8 +149,8 @@ function render(){
  }
  const hr=st.history.map((h,i)=>({h,i})).reverse();
  E.hist.innerHTML=hr.length?hr.map(x=>'<div class="card history-item'+(x.h.type==='fire'?' swipe-row fire-history':'')+'" data-history-index="'+x.i+'"><div class="history-type">'+esc(LABEL[x.h.type]||x.h.type)+'</div><div><b>'+x.h.code+'</b> '+esc(x.h.name||'')+'<br><small>'+esc(x.h.user||'Bilinmeyen')+' · '+esc(x.h.note||'')+(x.h.type==='fire'?' · Sağa/sola kaydır: geri al':'')+'</small></div></div>').join(''):'<div class="card empty">Henüz işlem geçmişi yok.</div>';
- $('.fire-history').forEach(x=>bindSwipe(x,()=>undoFireHistory(Number(x.dataset.historyIndex))));
- $('.fire-swipe').forEach(x=>bindSwipe(x,()=>clearFireForCode(x.dataset.code)));
+ $$('.fire-history').forEach(x=>bindSwipe(x,()=>undoFireHistory(Number(x.dataset.historyIndex))));
+ $$('.fire-swipe').forEach(x=>bindSwipe(x,()=>clearFireForCode(x.dataset.code)));
 }
 function openM(t,s){E.title.textContent=t;E.sub.textContent=s||'';E.modal.classList.add('open');E.save.disabled=true;E.bar.style.width='0%'}
 function closeM(){E.modal.classList.remove('open');E.body.innerHTML='';parsed=null;raw='';E.save.style.display='';E.cancel.textContent='Vazgeç';if(preview){URL.revokeObjectURL(preview);preview=''}}
