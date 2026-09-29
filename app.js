@@ -4,9 +4,10 @@ const KEY='stokFotoV2';
 const U={main:'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js',worker:'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/worker.min.js',core:'https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0/tesseract-core.wasm.js',lang:'https://tessdata.projectnaptha.com/4.0.0_fast'};
 const LABEL={prev:'Önceki Sayım','101':'101 Gelen','251':'251 Satan','301':'301 Transfer',fire:'Fire',label:'Yeni Ürün / Etiket'};
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
-let st=load(),mode='',parsed=null,raw='',worker=null,preview='';
+let st=load(),mode='',parsed=null,raw='',worker=null,preview='',guidedStream=null,guidedShots=[],guidedStage=0,guidedBusy=false;
 const E={cam:$('#cameraInput'),modal:$('#scanModal'),title:$('#modalTitle'),sub:$('#modalSub'),body:$('#scanBody'),save:$('#saveScanBtn'),cancel:$('#cancelScanBtn'),close:$('#closeModalBtn'),bar:$('#progressBar'),list:$('#stockList'),empty:$('#emptyState'),search:$('#searchInput'),pc:$('#productCount'),dc:$('#diffCount'),hist:$('#historyList'),date:$('#countDateInput'),net:$('#netBadge'),off:$('#offlineStatus'),toast:$('#toast'),user:$('#userSelect'),userNames:[$('#userName1'),$('#userName2'),$('#userName3')],saveUsers:$('#saveUserNamesBtn'),fireList:$('#fireList'),fireEmpty:$('#fireEmpty'),fireKg:$('#fireKgTotal'),fireAdet:$('#fireAdetTotal'),fireValue:$('#fireValueTotal')};
-function fresh(){return{version:9,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
+const G={root:$('#guidedCamera'),video:$('#guidedVideo'),step:$('#guidedStep'),text:$('#guidedText'),count:$('#guidedCount'),ready:$('#guidedReadyBtn'),fallback:$('#guidedFallbackBtn'),cancel:$('#guidedCancelBtn')};
+function fresh(){return{version:10,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
 function load(){
  const raw=localStorage.getItem(KEY);
  let d;
@@ -30,7 +31,7 @@ function load(){
      d.fireLog=d.history.filter(h=>h.type==='fire').map(h=>{const p=d.products[h.code]||{};return{at:h.at,user:h.user||'',code:h.code,name:h.name||p.name||'',unit:h.unit||p.unit||'ADET',qty:Math.abs(n(h.newv)-n(h.oldv)),cumulative:n(h.newv)}})
    }
    d.fireLog.forEach(x=>{const p=d.products[x.code]||{},up=Number(x.unitPrice)>0?Number(x.unitPrice):calcUnitPrice(p);if(x.unitPrice==null)x.unitPrice=up;if(x.amount==null)x.amount=n(x.qty)*up});
-   d.version=9;
+   d.version=10;
    return d
  }catch(e){
    // Never make an existing user's stock look empty just because a migration failed.
@@ -397,6 +398,77 @@ async function recognizeLabelBest(base,w){
  }
  return best.t
 }
+function wait(ms){return new Promise(r=>setTimeout(r,ms))}
+function speakGuide(t){
+ try{
+   if(!('speechSynthesis'in window))return;
+   speechSynthesis.cancel();
+   const u=new SpeechSynthesisUtterance(t);u.lang='tr-TR';u.rate=.92;u.pitch=1;speechSynthesis.speak(u)
+ }catch(_){}
+}
+function stopGuidedCamera(){
+ if(guidedStream){guidedStream.getTracks().forEach(t=>t.stop());guidedStream=null}
+ if(G.video)G.video.srcObject=null;
+ if(G.root){G.root.classList.remove('open');G.root.setAttribute('aria-hidden','true')}
+ guidedBusy=false;if(G.count)G.count.textContent=''
+}
+function guidedStageText(){
+ return guidedStage===0
+  ?{step:'1 / 2 · ÜST YARI',text:'Listenin üst yarısını çerçeveye doldur. Telefonu tablete mümkün olduğunca paralel tut ve yansımayı azalt.',button:'Üst yarı hazır'}
+  :{step:'2 / 2 · ALT YARI',text:'Şimdi listenin alt yarısını çerçeveye doldur. Üst kareyle 1 satır kadar örtüşmesi sorun değil.',button:'Alt yarı hazır'}
+}
+function paintGuidedStage(speak){
+ const x=guidedStageText();G.step.textContent=x.step;G.text.textContent=x.text;G.ready.textContent=x.button;G.ready.disabled=false;G.count.textContent='';
+ if(speak)speakGuide(x.text)
+}
+async function openGuidedPrevCamera(){
+ mode='prev';guidedShots=[];guidedStage=0;guidedBusy=false;
+ if(!G.root||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){E.cam.value='';E.cam.click();return}
+ G.root.classList.add('open');G.root.setAttribute('aria-hidden','false');G.ready.disabled=true;G.step.textContent='Kamera hazırlanıyor';G.text.textContent='Arka kamera açılıyor…';G.count.textContent='';
+ try{
+   guidedStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:3840,min:1280},height:{ideal:2160,min:720}},audio:false});
+   G.video.srcObject=guidedStream;await G.video.play();paintGuidedStage(true)
+ }catch(e){
+   stopGuidedCamera();toast('Akıllı kamera açılamadı; normal kamera açılıyor');E.cam.value='';E.cam.click()
+ }
+}
+function captureGuidedFrame(){
+ return new Promise((ok,no)=>{
+   const v=G.video;if(!v||!v.videoWidth||!v.videoHeight){no(new Error('Kamera görüntüsü hazır değil'));return}
+   const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;
+   const x=c.getContext('2d');x.drawImage(v,0,0,c.width,c.height);
+   c.toBlob(b=>b?ok(new File([b],'onceki-'+(guidedStage+1)+'.jpg',{type:'image/jpeg',lastModified:Date.now()})):no(new Error('Fotoğraf oluşturulamadı')),'image/jpeg',.96)
+ })
+}
+async function guidedReady(){
+ if(guidedBusy)return;guidedBusy=true;G.ready.disabled=true;
+ try{
+   for(const n of [3,2,1]){G.count.textContent=String(n);speakGuide(n===3?'Üç':n===2?'İki':'Bir');await wait(720)}
+   G.count.textContent='ÇEK ŞİMDİ';speakGuide('Çek şimdi');await wait(220);
+   guidedShots.push(await captureGuidedFrame());G.count.textContent='✓';await wait(350);
+   if(guidedStage===0){guidedStage=1;guidedBusy=false;paintGuidedStage(true);return}
+   const shots=guidedShots.slice();stopGuidedCamera();await scanPrevGuided(shots)
+ }catch(e){guidedBusy=false;G.ready.disabled=false;G.count.textContent='';toast(e.message||'Çekim başarısız')}
+}
+async function scanPrevGuided(files){
+ if(!files||!files.length)return;
+ openM('Önceki Sayım · Akıllı Çekim','Üst ve alt kare okunuyor…');
+ if(preview){URL.revokeObjectURL(preview);preview=''}preview=URL.createObjectURL(files[0]);
+ E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="status-box"><b>2 karelik akıllı çekim.</b><br>Üst ve alt yarı ayrı ayrı okunuyor; böylece küçük yazılar OCR için daha büyük kalır.</div>';
+ try{
+   const w=await getWorker(),M=new Map(),raws=[];
+   for(let i=0;i<files.length;i++){
+     E.sub.textContent=(i+1)+' / '+files.length+' kare okunuyor…';
+     const c=await prep(files[i],3000),r=await w.recognize(c,{}, {text:true,blocks:true}),t=r.data.text||'';
+     raws.push('--- '+(i===0?'ÜST':'ALT')+' KARE ---\n'+t);
+     const p=parsePrevStructured(t,r.data.blocks||[]);reconcilePrevRows(p.rows).forEach(row=>{
+       const old=M.get(row.code);
+       if(!old||(old.amount===''&&row.amount!==''))M.set(row.code,row)
+     })
+   }
+   raw=raws.join('\n\n');parsed={kind:'prev',rows:Array.from(M.values())};E.bar.style.width='100%';confirmUI()
+ }catch(e){E.body.innerHTML+='<div class="status-box" style="color:#992c2c">Akıllı çekim okunamadı: '+esc(e.message||e)+'</div>'}
+}
 async function scan(file){openM(LABEL[mode]+' fotoğrafı','Fotoğraf okunuyor…');preview=URL.createObjectURL(file);E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="status-box">OCR hazırlanıyor…</div>';try{const target=mode==='prev'?2500:(mode==='label'?2200:1900),c=await prep(file,target),w=await getWorker();if(mode==='label'){raw=await recognizeLabelBest(c,w);parsed=parseLabel(raw)}else if(mode==='prev'){E.sub.textContent='Önceki sayım satırları ayrıştırılıyor…';const r=await w.recognize(c,{}, {text:true,blocks:true});raw=r.data.text||'';parsed=parsePrevStructured(raw,r.data.blocks||[]);parsed.rows=reconcilePrevRows(parsed.rows)}else{const r=await w.recognize(c);raw=r.data.text||'';parsed=parseMove(raw,mode)}E.bar.style.width='100%';confirmUI()}catch(e){E.body.innerHTML+='<div class="status-box" style="color:#992c2c">Okuma başarısız: '+esc(e.message||e)+'</div>'}}
 function confirmUI(){
  E.sub.textContent='Okunan bilgileri kontrol et; gerekirse düzelt.';
@@ -550,7 +622,11 @@ function fireCsv(){
 function exportFire(){const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);dl(fireCsv(),'fire-raporu-'+stamp+'.csv','text/csv;charset=utf-8');toast('Fire raporu indirildi')}
 function dl(data,name,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:type||'application/octet-stream'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function offline(){const b=$('#offlinePrepBtn');b.disabled=true;openM('Çevrimdışı OCR hazırlanıyor','İlk kez internet gerekir.');E.save.style.display='none';E.cancel.textContent='Kapat';E.body.innerHTML='<div class="status-box">OCR motoru ve Türkçe model indiriliyor…</div>';try{const w=await getWorker(),c=document.createElement('canvas');c.width=300;c.height=80;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,300,80);x.fillStyle='#000';x.font='30px Arial';x.fillText('0200367 160',10,50);await w.recognize(c);st.settings.offlineReady=true;save();E.body.innerHTML='<div class="status-box" style="color:#116236"><b>Hazır.</b> Çevrimdışı OCR kurulumu tamamlandı. Bu pencereyi kapatabilirsin.</div>'}catch(e){E.body.innerHTML='<div class="status-box" style="color:#992c2c">Hazırlama başarısız: '+esc(e.message||e)+'</div>'}finally{b.disabled=false}}
-$$('.scan-btn[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;E.cam.value='';E.cam.click()});$('#wasteEntryBtn').onclick=()=>openWaste('');E.cam.onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)scan(f)};E.save.onclick=saveScan;E.cancel.onclick=closeM;E.close.onclick=closeM;E.search.oninput=render;E.date.onchange=()=>{st.settings.countDate=E.date.value;save()};if(E.user)E.user.onchange=()=>{st.settings.activeUser=Number(E.user.value)||0;save()};E.userNames.forEach((el,i)=>{if(el)el.onchange=()=>{const v=el.value.trim()||('Kullanıcı '+(i+1));st.settings.users[i]=v;save()}});if(E.saveUsers)E.saveUsers.onclick=()=>{E.userNames.forEach((el,i)=>{const v=(el&&el.value.trim())||('Kullanıcı '+(i+1));st.settings.users[i]=v});save();toast('Kullanıcı isimleri kaydedildi')};
+$$('.scan-btn[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;if(mode==='prev'){openGuidedPrevCamera();return}E.cam.value='';E.cam.click()});
+if(G.ready)G.ready.onclick=guidedReady;
+if(G.cancel)G.cancel.onclick=()=>{stopGuidedCamera();try{speechSynthesis.cancel()}catch(_){}};
+if(G.fallback)G.fallback.onclick=()=>{stopGuidedCamera();mode='prev';E.cam.value='';E.cam.click()};
+$('#wasteEntryBtn').onclick=()=>openWaste('');E.cam.onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)scan(f)};E.save.onclick=saveScan;E.cancel.onclick=closeM;E.close.onclick=closeM;E.search.oninput=render;E.date.onchange=()=>{st.settings.countDate=E.date.value;save()};if(E.user)E.user.onchange=()=>{st.settings.activeUser=Number(E.user.value)||0;save()};E.userNames.forEach((el,i)=>{if(el)el.onchange=()=>{const v=el.value.trim()||('Kullanıcı '+(i+1));st.settings.users[i]=v;save()}});if(E.saveUsers)E.saveUsers.onclick=()=>{E.userNames.forEach((el,i)=>{const v=(el&&el.value.trim())||('Kullanıcı '+(i+1));st.settings.users[i]=v});save();toast('Kullanıcı isimleri kaydedildi')};
 $$('.tab').forEach(b=>b.onclick=()=>activateTab(b.dataset.tab));
 $('#offlinePrepBtn').onclick=offline;$('#loadDemoBtn').onclick=()=>{const p=ensure('0200367','YOĞURT %4 YAĞLI 3000 G DOST','ADET',true);p.nameSource='confirmed';Object.assign(p,{unit:'ADET',previous:16,previousAmount:0,unitPrice:0,in101:160,sales251:149,transfer301:3,waste:0,otherNet:0,actual:''});save();toast('Yoğurt örneği: 30 adet')};
 $('#clearAllBtn').onclick=()=>{if(confirm('Tüm stok verisi silinsin mi?')){st=fresh();save()}};$('#clearHistoryBtn').onclick=()=>{if(confirm('Bu işlem yalnız geçmiş listesini temizler; stok, fire ve tutar hesaplarını değiştirmez. Liste temizlensin mi?')){st.history=[];save();toast('Geçmiş listesi temizlendi')}};
