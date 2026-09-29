@@ -34,7 +34,7 @@
     </section>
 
     <section class="scan-grid">
-      <button class="scan-btn prev" data-mode="prev"><span>📷</span><b>Önceki Sayım</b><small>Yeni çekim kod ve miktar hatalarını düzeltir</small></button>
+      <button class="scan-btn prev" data-mode="prev"><span>📷</span><b>Önceki Sayım</b><small>Akıllı kamera üst + alt yarıyı yönlendirir</small></button>
       <button class="scan-btn incoming" data-mode="101"><span>📷</span><b>101 Gelen</b><small>Toplam miktarı günceller</small></button>
       <button class="scan-btn sales" data-mode="251"><span>📷</span><b>251 Satan</b><small>Satış toplamını günceller</small></button>
       <button class="scan-btn transfer" data-mode="301"><span>📷</span><b>301 Transfer</b><small>+ gelen / - giden</small></button>
@@ -118,6 +118,27 @@
     </section>
   </main>
 
+  <div id="guidedCamera" class="guided-camera" aria-hidden="true">
+    <video id="guidedVideo" class="guided-video" autoplay muted playsinline></video>
+    <div class="guided-overlay">
+      <div class="guided-top">
+        <div>
+          <b id="guidedStep">Akıllı Kamera</b>
+          <div id="guidedText">Kamera hazırlanıyor…</div>
+        </div>
+        <button id="guidedCancelBtn" class="guided-icon" type="button" aria-label="Kapat">✕</button>
+      </div>
+      <div class="guided-frame" aria-hidden="true">
+        <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+      </div>
+      <div id="guidedCount" class="guided-count"></div>
+      <div class="guided-actions">
+        <button id="guidedFallbackBtn" class="guided-secondary" type="button">Normal kamerayı aç</button>
+        <button id="guidedReadyBtn" class="guided-primary" type="button" disabled>Hazırım</button>
+      </div>
+    </div>
+  </div>
+
   <div id="scanModal" class="modal" aria-hidden="true">
     <div class="modal-card">
       <div class="modal-head">
@@ -135,6 +156,6 @@
 
   <div id="toast" class="toast"></div>
 
-  <script src="app.js?v=24"></script>
+  <script src="app.js?v=25"></script>
 </body>
 </html>
