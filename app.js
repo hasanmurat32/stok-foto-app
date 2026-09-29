@@ -299,6 +299,17 @@ function qtyFromStructuredLine(s){
  if(!nums||!nums.length)return null;
  return parseQtyValue(nums[0])
 }
+function qtyFromPackFields(s){
+ const raw=String(s||'').replace(/\s+/g,' ');
+ const inner=raw.match(/koli\s*[iıİI1l][cç]i\s*[:=]?\s*(\d+(?:[.,]\d+)?)/i);
+ const boxes=raw.match(/koli\s*m[iıİI1l]ktar[iıİI1l]?\s*[:=]?\s*(\d+(?:[.,]\d+)?)/i);
+ const outside=raw.match(/koli\s*d[iıİI1l][sş][iıİI1l]\s*m[iıİI1l]ktar\s*[:=]?\s*(\d+(?:[.,]\d+)?)/i);
+ if(!inner||!boxes||!outside)return null;
+ const a=parseQtyValue(inner[1]),b=parseQtyValue(boxes[1]),c=parseQtyValue(outside[1]);
+ if(a==null||b==null||c==null||a<0||b<0||c<0)return null;
+ const q=a*b+c;
+ return Number.isFinite(q)?q:null
+}
 function amountFromStructuredLine(s){
  const raw=String(s||''),nrm=normOcr(raw);
  if(!/toplam/.test(nrm)||!/tutar/.test(nrm))return null;
@@ -330,8 +341,9 @@ function parsePrevStructured(text,blocks){
    const y1=next?Math.floor((cur.y+next.y)/2):cur.y+Math.max(60,(k?cur.y-starts[k-1].y:80));
    const band=L.filter(x=>{const cy=(x.bbox.y0+x.bbox.y1)/2;return cy>=y0&&cy<y1});
    let q=null,amount=null;
-   for(const l of band){if(q==null)q=qtyFromStructuredLine(l.text);if(amount==null)amount=amountFromStructuredLine(l.text)}
    const joined=band.map(x=>x.text).join(' ');
+   q=qtyFromPackFields(joined);
+   for(const l of band){if(q==null)q=qtyFromStructuredLine(l.text);if(amount==null)amount=amountFromStructuredLine(l.text)}
    if(q==null)q=quantityAfterLabel(joined);
    if(amount==null)amount=amountAfterLabel(joined);
    if(q==null)continue;
@@ -349,7 +361,7 @@ function parsePrev(t){
   for(let k=0;k<starts.length;k++){
     const cur=starts[k],end=k+1<starts.length?starts[k+1].i:Math.min(L.length,cur.i+5);
     const block=L.slice(cur.i,end).join(' ');
-    const q=quantityAfterLabel(block),amount=amountAfterLabel(block);
+    const q=qtyFromPackFields(block)??quantityAfterLabel(block),amount=amountAfterLabel(block);
     if(q==null)continue;
     const name=productNameFromBlock(block,cur.c)||('Ürün '+cur.c);
     rows.push({code:cur.c,name,qty:q,amount:amount==null?'':amount,unit:unitFromBlock(block)})
