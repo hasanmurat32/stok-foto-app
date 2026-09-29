@@ -6,7 +6,7 @@ const LABEL={prev:'Önceki Sayım','101':'101 Gelen','251':'251 Satan','301':'30
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 let st=load(),mode='',parsed=null,raw='',worker=null,preview='';
 const E={cam:$('#cameraInput'),modal:$('#scanModal'),title:$('#modalTitle'),sub:$('#modalSub'),body:$('#scanBody'),save:$('#saveScanBtn'),cancel:$('#cancelScanBtn'),close:$('#closeModalBtn'),bar:$('#progressBar'),list:$('#stockList'),empty:$('#emptyState'),search:$('#searchInput'),pc:$('#productCount'),dc:$('#diffCount'),hist:$('#historyList'),date:$('#countDateInput'),net:$('#netBadge'),off:$('#offlineStatus'),toast:$('#toast'),user:$('#userSelect'),userNames:[$('#userName1'),$('#userName2'),$('#userName3')],saveUsers:$('#saveUserNamesBtn'),fireList:$('#fireList'),fireEmpty:$('#fireEmpty'),fireKg:$('#fireKgTotal'),fireAdet:$('#fireAdetTotal'),fireValue:$('#fireValueTotal')};
-function fresh(){return{version:7,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
+function fresh(){return{version:8,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
 function load(){
  const raw=localStorage.getItem(KEY);
  let d;
@@ -30,7 +30,7 @@ function load(){
      d.fireLog=d.history.filter(h=>h.type==='fire').map(h=>{const p=d.products[h.code]||{};return{at:h.at,user:h.user||'',code:h.code,name:h.name||p.name||'',unit:h.unit||p.unit||'ADET',qty:Math.abs(n(h.newv)-n(h.oldv)),cumulative:n(h.newv)}})
    }
    d.fireLog.forEach(x=>{const p=d.products[x.code]||{},up=Number(x.unitPrice)>0?Number(x.unitPrice):calcUnitPrice(p);if(x.unitPrice==null)x.unitPrice=up;if(x.amount==null)x.amount=n(x.qty)*up});
-   d.version=7;
+   d.version=8;
    return d
  }catch(e){
    // Never make an existing user's stock look empty just because a migration failed.
@@ -350,7 +350,8 @@ function confirmUI(){
  }
  if(parsed.kind==='prev'){
   const none=!parsed.rows.length;
-  E.body.innerHTML='<img class="preview" src="'+preview+'">'+(none?'<div class="status-box" style="color:#8a4f19"><b>OCR tamamlandı ama ürün satırı bulunamadı.</b><br>Fotoğrafı yeniden çekebilir veya satırı elle ekleyebilirsin.</div><button id="retryPrev" class="primary" style="margin-bottom:8px">Fotoğrafı Yeniden Çek</button>':'')+'<div class="prev-grid-head"><span>Kod</span><span>Ürün</span><span>Miktar</span><span>Tutar TL</span><span></span></div><div id="prevRows" class="confirm-grid">'+parsed.rows.map((r,i)=>'<div class="confirm-row" data-i="'+i+'"><input class="code-input" value="'+r.code+'" inputmode="numeric"><input class="name-input" value="'+esc(r.name)+' ('+esc(r.unit||'ADET')+')"><input class="qty-input" type="number" step="0.001" value="'+r.qty+'" inputmode="decimal"><input class="amount-input" type="number" step="0.01" value="'+(r.amount===''?'':r.amount)+'" inputmode="decimal" placeholder="TL"><button class="remove-row">✕</button></div>').join('')+'</div><button id="addPrevRow" class="secondary" style="margin-top:8px">+ Elle satır ekle</button><details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details>';
+  const review=parsed.rows.map((r,i)=>'<div class="prev-review" data-review-i="'+i+'"><div class="confirm-row" data-i="'+i+'"><input class="code-input" value="'+r.code+'" inputmode="numeric"><input class="name-input" value="'+esc(r.name)+' ('+esc(r.unit||'ADET')+')"><input class="qty-input" type="number" step="0.001" value="'+r.qty+'" inputmode="decimal"><input class="amount-input" type="number" step="0.01" value="'+(r.amount===''?'':r.amount)+'" inputmode="decimal" placeholder="TL"><button class="remove-row">✕</button></div><div class="prev-row-status"></div></div>').join('');
+  E.body.innerHTML='<img class="preview" src="'+preview+'">'+(none?'<div class="status-box" style="color:#8a4f19"><b>OCR tamamlandı ama ürün satırı bulunamadı.</b><br>Fotoğrafı yeniden çekebilir veya satırı elle ekleyebilirsin.</div><button id="retryPrev" class="primary" style="margin-bottom:8px">Fotoğrafı Yeniden Çek</button>':'<div class="status-box prev-correction-note"><b>Düzeltme kontrolü açık.</b><br>Aynı ürün kodu daha önce varsa yeni fotoğraftaki miktar eskisinin yerine geçer. 101 / 251 / 301 / Fire verilerine dokunulmaz. Aynı kalan satırlar tekrar işlem geçmişine yazılmaz.</div>')+'<div class="prev-grid-head"><span>Kod</span><span>Ürün</span><span>Miktar</span><span>Tutar TL</span><span></span></div><div id="prevRows" class="confirm-grid">'+review+'</div><button id="addPrevRow" class="secondary" style="margin-top:8px">+ Elle satır ekle</button><details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details>';
   bindPrev();
   if($('#retryPrev'))$('#retryPrev').onclick=()=>{closeM();mode='prev';E.cam.value='';E.cam.click()};
   $('#addPrevRow').onclick=()=>{parsed.rows.push({code:'',name:'',qty:0,amount:'',unit:'ADET'});confirmUI()};
@@ -358,7 +359,18 @@ function confirmUI(){
 }
  E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="confirm-grid"><div class="field"><label>Ürün Kodu</label><input id="mc" value="'+esc(parsed.code)+'" inputmode="numeric"></div><div class="field"><label>Ürün Adı</label><input id="mn" value="'+esc(parsed.name)+'"></div><div class="field"><label>Toplam Miktar</label><input id="mq" type="number" inputmode="numeric" value="'+(parsed.qty==null?'':Math.abs(parsed.qty))+'"></div>'+(parsed.mode==='301'?'<div class="field"><label>301 yönü</label><div class="direction"><button id="dp" class="'+(parsed.dir>0?'active':'')+'">+ Bize gelen</button><button id="dm" class="'+(parsed.dir<0?'active':'')+'">− Bizden giden</button></div></div>':'')+'<details class="raw"><summary>OCR ham metni</summary><pre>'+esc(raw)+'</pre></details></div>';const val=()=>E.save.disabled=!(code($('#mc').value).length>=7&&$('#mq').value!=='');$('#mc').oninput=val;$('#mq').oninput=val;if(parsed.mode==='301'){$('#dp').onclick=()=>{parsed.dir=1;confirmUI()};$('#dm').onclick=()=>{parsed.dir=-1;confirmUI()}}val()
 }
-function bindPrev(){$$('#prevRows .confirm-row').forEach(row=>{const i=Number(row.dataset.i),r=parsed.rows[i];row.querySelector('.code-input').oninput=e=>r.code=code(e.target.value);row.querySelector('.name-input').oninput=e=>{const v=e.target.value;r.name=v.replace(/\s*\((ADET|KG)\)\s*$/i,'').trim()};row.querySelector('.qty-input').oninput=e=>r.qty=Number(e.target.value);row.querySelector('.amount-input').oninput=e=>r.amount=e.target.value===''?'':Number(e.target.value);row.querySelector('.remove-row').onclick=()=>{parsed.rows.splice(i,1);confirmUI()}})}
+function prevRowStatus(r){
+ const c=code(r.code),p=st.products[c],q=Number(r.qty);
+ if(c.length<7||!Number.isFinite(q))return{cls:'prev-status-warn',text:'Kod veya miktarı kontrol et'};
+ if(!p)return{cls:'prev-status-new',text:'YENİ · Önceki '+fmtQty(q)+' '+(r.unit||'ADET')};
+ const old=n(p.previous),same=Math.abs(old-q)<.0005;
+ return same?{cls:'prev-status-same',text:'AYNI · mevcut '+fmtQty(old)+' '+(p.unit||r.unit||'ADET')}:{cls:'prev-status-change',text:'DÜZELTME · '+fmtQty(old)+' → '+fmtQty(q)+' '+(p.unit||r.unit||'ADET')}
+}
+function paintPrevRowStatus(row,r){
+ const el=row.closest('.prev-review')&&row.closest('.prev-review').querySelector('.prev-row-status');if(!el)return;
+ const x=prevRowStatus(r);el.className='prev-row-status '+x.cls;el.textContent=x.text
+}
+function bindPrev(){$$('#prevRows .confirm-row').forEach(row=>{const i=Number(row.dataset.i),r=parsed.rows[i];const repaint=()=>paintPrevRowStatus(row,r);row.querySelector('.code-input').oninput=e=>{r.code=code(e.target.value);repaint()};row.querySelector('.name-input').oninput=e=>{const v=e.target.value;r.name=v.replace(/\s*\((ADET|KG)\)\s*$/i,'').trim()};row.querySelector('.qty-input').oninput=e=>{r.qty=Number(e.target.value);repaint()};row.querySelector('.amount-input').oninput=e=>r.amount=e.target.value===''?'':Number(e.target.value);row.querySelector('.remove-row').onclick=()=>{parsed.rows.splice(i,1);confirmUI()};repaint()})}
 function hist(type,p,field,oldv,newv,note,id){const user=st.settings.users[st.settings.activeUser]||'Kullanıcı',h={id:id||txid(),at:new Date().toISOString(),user,type,code:p.code,name:p.name,unit:p.unit||'ADET',field,oldv,newv,note};st.history.push(h);if(st.history.length>1000)st.history=st.history.slice(-1000);return h}
 function openProductEdit(c){
  const p=st.products[c];if(!p)return;
@@ -423,10 +435,24 @@ function saveScan(){
    finishSave(p.code+' fire kaydedildi · '+fmtTL(amount),'fire');return
  }
  if(parsed.kind==='prev'){
-   let k=0;
-   parsed.rows.forEach(r=>{const c=code(r.code),q=Number(r.qty);if(c.length<7||!Number.isFinite(q))return;const p=ensure(c,r.name,r.unit,false),o=p.previous;p.previous=q;p.previousAmount=r.amount===''?'':n(r.amount);if(q>0&&p.previousAmount!=='')p.unitPrice=n(p.previousAmount)/q;hist('prev',p,'previous',o,q,'Önceki sayım '+q+(p.previousAmount!==''?' · Tutar '+p.previousAmount+' TL':''));k++});
-   if(!k){toast('Kaydedilecek geçerli satır yok');return}
-   finishSave(k+' ürün kaydedildi');return
+   let valid=0,changed=0,same=0,added=0;
+   parsed.rows.forEach(r=>{
+     const c=code(r.code),q=Number(r.qty);if(c.length<7||!Number.isFinite(q))return;valid++;
+     const existed=!!st.products[c],p=ensure(c,r.name,r.unit,false),oldQ=n(p.previous),oldAmount=p.previousAmount===''?'':n(p.previousAmount);
+     const hasAmount=r.amount!==''&&r.amount!=null&&Number.isFinite(Number(r.amount)),newAmount=hasAmount?n(r.amount):oldAmount;
+     const qtyChanged=!existed||Math.abs(oldQ-q)>=.0005;
+     const amountChanged=hasAmount&&(!existed||oldAmount===''||Math.abs(n(oldAmount)-newAmount)>=.005);
+     if(!qtyChanged&&!amountChanged){same++;return}
+     p.previous=q;
+     if(hasAmount||!existed)p.previousAmount=hasAmount?newAmount:'';
+     if(q>0&&p.previousAmount!=='')p.unitPrice=n(p.previousAmount)/q;
+     const note=existed?'Önceki sayım düzeltildi · '+fmtQty(oldQ)+' → '+fmtQty(q)+(hasAmount?' · Tutar '+newAmount+' TL':''):'Önceki sayım eklendi · '+fmtQty(q)+(hasAmount?' · Tutar '+newAmount+' TL':'');
+     hist('prev',p,'previous',oldQ,q,note);
+     changed++;if(!existed)added++
+   });
+   if(!valid){toast('Kaydedilecek geçerli satır yok');return}
+   const corrected=changed-added,parts=[];if(corrected)parts.push(corrected+' düzeltildi');if(added)parts.push(added+' yeni');if(same)parts.push(same+' aynı kaldı');
+   finishSave(parts.join(' · ')||'Değişiklik yok');return
  }
  const c=code($('#mc').value),name=$('#mn').value.trim(),q=Math.abs(Number($('#mq').value)),p=ensure(c,name,null,false);
  if(!p||!Number.isFinite(q)){toast('Ürün kodu veya miktarı kontrol et');return}
