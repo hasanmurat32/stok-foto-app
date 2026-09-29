@@ -1,6 +1,6 @@
-const APP_CACHE='stok-foto-app-v23';
+const APP_CACHE='stok-foto-app-v24';
 const OCR_CACHE='stok-foto-ocr-v2';
-const APP_ASSETS=['./','./index.html','./style.css','./app.js?v=23','./manifest.webmanifest','./icons/icon.svg'];
+const APP_ASSETS=['./','./index.html','./style.css','./app.js?v=24','./manifest.webmanifest','./icons/icon.svg'];
 const OCR_HOSTS=['cdn.jsdelivr.net','tessdata.projectnaptha.com'];
 
 self.addEventListener('install',e=>{

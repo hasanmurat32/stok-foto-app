@@ -6,7 +6,7 @@ const LABEL={prev:'Önceki Sayım','101':'101 Gelen','251':'251 Satan','301':'30
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 let st=load(),mode='',parsed=null,raw='',worker=null,preview='';
 const E={cam:$('#cameraInput'),modal:$('#scanModal'),title:$('#modalTitle'),sub:$('#modalSub'),body:$('#scanBody'),save:$('#saveScanBtn'),cancel:$('#cancelScanBtn'),close:$('#closeModalBtn'),bar:$('#progressBar'),list:$('#stockList'),empty:$('#emptyState'),search:$('#searchInput'),pc:$('#productCount'),dc:$('#diffCount'),hist:$('#historyList'),date:$('#countDateInput'),net:$('#netBadge'),off:$('#offlineStatus'),toast:$('#toast'),user:$('#userSelect'),userNames:[$('#userName1'),$('#userName2'),$('#userName3')],saveUsers:$('#saveUserNamesBtn'),fireList:$('#fireList'),fireEmpty:$('#fireEmpty'),fireKg:$('#fireKgTotal'),fireAdet:$('#fireAdetTotal'),fireValue:$('#fireValueTotal')};
-function fresh(){return{version:8,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
+function fresh(){return{version:9,settings:{countDate:'',offlineReady:false,users:['Murat','Yardımcı 1','Yardımcı 2'],activeUser:0},products:{},history:[],snapshots:[],fireLog:[]}}
 function load(){
  const raw=localStorage.getItem(KEY);
  let d;
@@ -30,7 +30,7 @@ function load(){
      d.fireLog=d.history.filter(h=>h.type==='fire').map(h=>{const p=d.products[h.code]||{};return{at:h.at,user:h.user||'',code:h.code,name:h.name||p.name||'',unit:h.unit||p.unit||'ADET',qty:Math.abs(n(h.newv)-n(h.oldv)),cumulative:n(h.newv)}})
    }
    d.fireLog.forEach(x=>{const p=d.products[x.code]||{},up=Number(x.unitPrice)>0?Number(x.unitPrice):calcUnitPrice(p);if(x.unitPrice==null)x.unitPrice=up;if(x.amount==null)x.amount=n(x.qty)*up});
-   d.version=8;
+   d.version=9;
    return d
  }catch(e){
    // Never make an existing user's stock look empty just because a migration failed.
@@ -247,6 +247,50 @@ function codeFromAnyLine(s){
  for(const x of arr){const cc=code(x);if(cc.length>=7)return cc}
  return ''
 }
+function oneInsertedDigitApart(a,b){
+ a=code(a);b=code(b);
+ if(Math.abs(a.length-b.length)!==1)return false;
+ let longer=a.length>b.length?a:b,shorter=a.length>b.length?b:a;
+ for(let i=0;i<longer.length;i++)if(longer.slice(0,i)+longer.slice(i+1)===shorter)return true;
+ return false
+}
+function resolvePrevCode(rawCode){
+ const c=code(rawCode);if(!c)return{code:c,raw:c,kind:'invalid'};
+ if(st.products[c])return{code:c,raw:c,kind:'exact'};
+ const candidates=Object.keys(st.products).filter(x=>oneInsertedDigitApart(c,x));
+ if(candidates.length===1)return{code:candidates[0],raw:c,kind:'auto'};
+ return{code:c,raw:c,kind:candidates.length?'ambiguous':'new'}
+}
+function reconcilePrevRows(rows){
+ return (rows||[]).map(r=>{
+   const rawCode=code(r.rawCode||r.code),m=resolvePrevCode(rawCode);
+   return Object.assign({},r,{rawCode,code:m.code,codeMatch:m.kind,codeWasCorrected:m.kind==='auto'})
+ })
+}
+function canAutoRemovePrevGhost(p){
+ if(!p)return false;
+ const noMoves=n(p.in101)===0&&n(p.sales251)===0&&n(p.transfer301)===0&&n(p.waste)===0&&n(p.otherNet)===0;
+ const noActual=p.actual===''||p.actual==null;
+ return noMoves&&noActual&&p.nameSource!=='confirmed'
+}
+function prevGhostCodes(rows){
+ const trusted=new Set((rows||[]).map(r=>code(r.code)).filter(c=>st.products[c]));
+ const ghosts=[];
+ trusted.forEach(c=>{
+   Object.keys(st.products).forEach(g=>{
+     if(g===c||!oneInsertedDigitApart(g,c))return;
+     if(canAutoRemovePrevGhost(st.products[g]))ghosts.push(g)
+   })
+ });
+ return Array.from(new Set(ghosts))
+}
+function removePrevGhost(c){
+ if(!st.products[c]||!canAutoRemovePrevGhost(st.products[c]))return false;
+ delete st.products[c];
+ st.history=st.history.filter(h=>h.code!==c);
+ st.fireLog=(st.fireLog||[]).filter(x=>x.code!==c);
+ return true
+}
 function qtyFromStructuredLine(s){
  const raw=String(s||''),nrm=normOcr(raw);
  if(!/toplam/.test(nrm)||!/mik/.test(nrm)||/tutar/.test(nrm))return null;
@@ -254,6 +298,17 @@ function qtyFromStructuredLine(s){
  const nums=tail.match(/[+\-]?\s*\d+(?:[.,]\d+)?/g);
  if(!nums||!nums.length)return null;
  return parseQtyValue(nums[0])
+}
+function qtyFromPackFields(s){
+ const raw=String(s||'').replace(/\s+/g,' ');
+ const inner=raw.match(/koli\s*[iıİI1l][cç]i\s*[:=]?\s*(\d+(?:[.,]\d+)?)/i);
+ const boxes=raw.match(/koli\s*m[iıİI1l]ktar[iıİI1l]?\s*[:=]?\s*(\d+(?:[.,]\d+)?)/i);
+ const outside=raw.match(/koli\s*d[iıİI1l][sş][iıİI1l]\s*m[iıİI1l]ktar\s*[:=]?\s*(\d+(?:[.,]\d+)?)/i);
+ if(!inner||!boxes||!outside)return null;
+ const a=parseQtyValue(inner[1]),b=parseQtyValue(boxes[1]),c=parseQtyValue(outside[1]);
+ if(a==null||b==null||c==null||a<0||b<0||c<0)return null;
+ const q=a*b+c;
+ return Number.isFinite(q)?q:null
 }
 function amountFromStructuredLine(s){
  const raw=String(s||''),nrm=normOcr(raw);
@@ -286,8 +341,9 @@ function parsePrevStructured(text,blocks){
    const y1=next?Math.floor((cur.y+next.y)/2):cur.y+Math.max(60,(k?cur.y-starts[k-1].y:80));
    const band=L.filter(x=>{const cy=(x.bbox.y0+x.bbox.y1)/2;return cy>=y0&&cy<y1});
    let q=null,amount=null;
-   for(const l of band){if(q==null)q=qtyFromStructuredLine(l.text);if(amount==null)amount=amountFromStructuredLine(l.text)}
    const joined=band.map(x=>x.text).join(' ');
+   q=qtyFromPackFields(joined);
+   for(const l of band){if(q==null)q=qtyFromStructuredLine(l.text);if(amount==null)amount=amountFromStructuredLine(l.text)}
    if(q==null)q=quantityAfterLabel(joined);
    if(amount==null)amount=amountAfterLabel(joined);
    if(q==null)continue;
@@ -305,7 +361,7 @@ function parsePrev(t){
   for(let k=0;k<starts.length;k++){
     const cur=starts[k],end=k+1<starts.length?starts[k+1].i:Math.min(L.length,cur.i+5);
     const block=L.slice(cur.i,end).join(' ');
-    const q=quantityAfterLabel(block),amount=amountAfterLabel(block);
+    const q=qtyFromPackFields(block)??quantityAfterLabel(block),amount=amountAfterLabel(block);
     if(q==null)continue;
     const name=productNameFromBlock(block,cur.c)||('Ürün '+cur.c);
     rows.push({code:cur.c,name,qty:q,amount:amount==null?'':amount,unit:unitFromBlock(block)})
@@ -341,7 +397,7 @@ async function recognizeLabelBest(base,w){
  }
  return best.t
 }
-async function scan(file){openM(LABEL[mode]+' fotoğrafı','Fotoğraf okunuyor…');preview=URL.createObjectURL(file);E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="status-box">OCR hazırlanıyor…</div>';try{const target=mode==='prev'?2500:(mode==='label'?2200:1900),c=await prep(file,target),w=await getWorker();if(mode==='label'){raw=await recognizeLabelBest(c,w);parsed=parseLabel(raw)}else if(mode==='prev'){E.sub.textContent='Önceki sayım satırları ayrıştırılıyor…';const r=await w.recognize(c,{}, {text:true,blocks:true});raw=r.data.text||'';parsed=parsePrevStructured(raw,r.data.blocks||[])}else{const r=await w.recognize(c);raw=r.data.text||'';parsed=parseMove(raw,mode)}E.bar.style.width='100%';confirmUI()}catch(e){E.body.innerHTML+='<div class="status-box" style="color:#992c2c">Okuma başarısız: '+esc(e.message||e)+'</div>'}}
+async function scan(file){openM(LABEL[mode]+' fotoğrafı','Fotoğraf okunuyor…');preview=URL.createObjectURL(file);E.body.innerHTML='<img class="preview" src="'+preview+'"><div class="status-box">OCR hazırlanıyor…</div>';try{const target=mode==='prev'?2500:(mode==='label'?2200:1900),c=await prep(file,target),w=await getWorker();if(mode==='label'){raw=await recognizeLabelBest(c,w);parsed=parseLabel(raw)}else if(mode==='prev'){E.sub.textContent='Önceki sayım satırları ayrıştırılıyor…';const r=await w.recognize(c,{}, {text:true,blocks:true});raw=r.data.text||'';parsed=parsePrevStructured(raw,r.data.blocks||[]);parsed.rows=reconcilePrevRows(parsed.rows)}else{const r=await w.recognize(c);raw=r.data.text||'';parsed=parseMove(raw,mode)}E.bar.style.width='100%';confirmUI()}catch(e){E.body.innerHTML+='<div class="status-box" style="color:#992c2c">Okuma başarısız: '+esc(e.message||e)+'</div>'}}
 function confirmUI(){
  E.sub.textContent='Okunan bilgileri kontrol et; gerekirse düzelt.';
  if(parsed.kind==='label'){
@@ -362,7 +418,11 @@ function confirmUI(){
 function prevRowStatus(r){
  const c=code(r.code),p=st.products[c],q=Number(r.qty);
  if(c.length<7||!Number.isFinite(q))return{cls:'prev-status-warn',text:'Kod veya miktarı kontrol et'};
- if(!p)return{cls:'prev-status-new',text:'YENİ · Önceki '+fmtQty(q)+' '+(r.unit||'ADET')};
+ if(r.codeWasCorrected&&r.rawCode&&r.rawCode!==c){
+   const base=p?' · mevcut '+fmtQty(n(p.previous))+' → '+fmtQty(q):'';
+   return{cls:'prev-status-change',text:'KOD DÜZELTİLDİ · '+r.rawCode+' → '+c+base}
+ }
+ if(!p)return{cls:'prev-status-new',text:'YENİ / KONTROL ET · '+c+' · Önceki '+fmtQty(q)+' '+(r.unit||'ADET')};
  const old=n(p.previous),same=Math.abs(old-q)<.0005;
  return same?{cls:'prev-status-same',text:'AYNI · mevcut '+fmtQty(old)+' '+(p.unit||r.unit||'ADET')}:{cls:'prev-status-change',text:'DÜZELTME · '+fmtQty(old)+' → '+fmtQty(q)+' '+(p.unit||r.unit||'ADET')}
 }
@@ -370,7 +430,7 @@ function paintPrevRowStatus(row,r){
  const el=row.closest('.prev-review')&&row.closest('.prev-review').querySelector('.prev-row-status');if(!el)return;
  const x=prevRowStatus(r);el.className='prev-row-status '+x.cls;el.textContent=x.text
 }
-function bindPrev(){$$('#prevRows .confirm-row').forEach(row=>{const i=Number(row.dataset.i),r=parsed.rows[i];const repaint=()=>paintPrevRowStatus(row,r);row.querySelector('.code-input').oninput=e=>{r.code=code(e.target.value);repaint()};row.querySelector('.name-input').oninput=e=>{const v=e.target.value;r.name=v.replace(/\s*\((ADET|KG)\)\s*$/i,'').trim()};row.querySelector('.qty-input').oninput=e=>{r.qty=Number(e.target.value);repaint()};row.querySelector('.amount-input').oninput=e=>r.amount=e.target.value===''?'':Number(e.target.value);row.querySelector('.remove-row').onclick=()=>{parsed.rows.splice(i,1);confirmUI()};repaint()})}
+function bindPrev(){$$('#prevRows .confirm-row').forEach(row=>{const i=Number(row.dataset.i),r=parsed.rows[i];const repaint=()=>paintPrevRowStatus(row,r);row.querySelector('.code-input').oninput=e=>{r.code=code(e.target.value);r.rawCode=r.code;r.codeWasCorrected=false;r.codeMatch=st.products[r.code]?'exact':'new';repaint()};row.querySelector('.name-input').oninput=e=>{const v=e.target.value;r.name=v.replace(/\s*\((ADET|KG)\)\s*$/i,'').trim()};row.querySelector('.qty-input').oninput=e=>{r.qty=Number(e.target.value);repaint()};row.querySelector('.amount-input').oninput=e=>r.amount=e.target.value===''?'':Number(e.target.value);row.querySelector('.remove-row').onclick=()=>{parsed.rows.splice(i,1);confirmUI()};repaint()})}
 function hist(type,p,field,oldv,newv,note,id){const user=st.settings.users[st.settings.activeUser]||'Kullanıcı',h={id:id||txid(),at:new Date().toISOString(),user,type,code:p.code,name:p.name,unit:p.unit||'ADET',field,oldv,newv,note};st.history.push(h);if(st.history.length>1000)st.history=st.history.slice(-1000);return h}
 function openProductEdit(c){
  const p=st.products[c];if(!p)return;
@@ -435,6 +495,9 @@ function saveScan(){
    finishSave(p.code+' fire kaydedildi · '+fmtTL(amount),'fire');return
  }
  if(parsed.kind==='prev'){
+   const ghosts=prevGhostCodes(parsed.rows);
+   if(ghosts.length&&!confirm('Eski OCR kaynaklı '+ghosts.length+' mükerrer ürün kaydı temizlenecek: '+ghosts.join(', ')+'\n\nDevam edilsin mi?'))return;
+   let removedGhosts=0;ghosts.forEach(c=>{if(removePrevGhost(c))removedGhosts++});
    let valid=0,changed=0,same=0,added=0;
    parsed.rows.forEach(r=>{
      const c=code(r.code),q=Number(r.qty);if(c.length<7||!Number.isFinite(q))return;valid++;
@@ -451,7 +514,7 @@ function saveScan(){
      changed++;if(!existed)added++
    });
    if(!valid){toast('Kaydedilecek geçerli satır yok');return}
-   const corrected=changed-added,parts=[];if(corrected)parts.push(corrected+' düzeltildi');if(added)parts.push(added+' yeni');if(same)parts.push(same+' aynı kaldı');
+   const corrected=changed-added,parts=[];if(corrected)parts.push(corrected+' düzeltildi');if(added)parts.push(added+' yeni');if(same)parts.push(same+' aynı kaldı');if(removedGhosts)parts.push(removedGhosts+' mükerrer temizlendi');
    finishSave(parts.join(' · ')||'Değişiklik yok');return
  }
  const c=code($('#mc').value),name=$('#mn').value.trim(),q=Math.abs(Number($('#mq').value)),p=ensure(c,name,null,false);
