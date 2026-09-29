@@ -89,7 +89,7 @@
         <button id="exportXlsxBtn" class="primary">Birikimli Excel yedeği oluştur</button>
         <button id="exportBackupBtn" class="secondary">Tam yedek (.json) oluştur</button>
         <label class="secondary file-label">Yedek geri yükle<input id="importBackupInput" type="file" accept="application/json,.json" hidden></label>
-        <p class="note">Her Excel yedeğinde mevcut stok görünümü yeni bir tarih-saat kaydı olarak eklenir; sonraki yedek önceki kayıtları da içerir. Telefon değiştirirken JSON yedeğini de sakla.</p>
+        <p class="note">Her Excel yedeğinde mevcut stok görünümü yeni bir tarih-saat kaydı olarak eklenir; sonraki yedek önceki kayıtları da içerir. “Önceki Sayımı Sıfırla ve Yeniden Çek” kullanılırsa eski birikimli Excel kayıtları temizlenir ve sonraki Excel yedeği temiz veriden yeniden birikmeye başlar. Telefon değiştirirken JSON yedeğini de sakla.</p>
       </div>
     </section>
 
@@ -113,6 +113,8 @@
         <button id="offlinePrepBtn" class="primary">Çevrimdışı OCR'ı hazırla</button>
         <div id="offlineStatus" class="status-box">İlk kurulumda internet varken bu düğmeye bir kez bas.</div>
         <button id="loadDemoBtn" class="secondary">Yoğurt örneğini yükle (30 adet)</button>
+        <div class="status-box"><b>Önceki Sayımı yeniden kur</b><br>Yanlış OCR başlangıçlarını temizler; 101 / 251 / 301 / Fire hareketlerini korur. Birikimli Excel yedek kayıtları da sıfırlanır.</div>
+        <button id="resetPreviousBtn" class="ghost danger">Önceki Sayımı Sıfırla ve Yeniden Çek</button>
         <button id="clearAllBtn" class="ghost danger">Tüm stok verisini sil</button>
       </div>
     </section>
@@ -156,6 +158,6 @@
 
   <div id="toast" class="toast"></div>
 
-  <script src="app.js?v=25"></script>
+  <script src="app.js?v=26"></script>
 </body>
 </html>
