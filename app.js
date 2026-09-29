@@ -445,7 +445,7 @@ function saveScan(){
      if(!qtyChanged&&!amountChanged){same++;return}
      p.previous=q;
      if(hasAmount||!existed)p.previousAmount=hasAmount?newAmount:'';
-     if(q>0&&p.previousAmount!=='')p.unitPrice=n(p.previousAmount)/q;
+     if(hasAmount&&q>0&&p.previousAmount!=='')p.unitPrice=n(p.previousAmount)/q;
      const note=existed?'Önceki sayım düzeltildi · '+fmtQty(oldQ)+' → '+fmtQty(q)+(hasAmount?' · Tutar '+newAmount+' TL':''):'Önceki sayım eklendi · '+fmtQty(q)+(hasAmount?' · Tutar '+newAmount+' TL':'');
      hist('prev',p,'previous',oldQ,q,note);
      changed++;if(!existed)added++
